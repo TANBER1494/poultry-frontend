@@ -74,7 +74,7 @@ const SmartRoot = () => {
     case 'OWNER':
       return <Navigate to="/owner/dashboard" replace />;
     case 'SUPERVISOR':
-      return <Navigate to="/supervisor/dashboard" replace />;
+      return <Navigate to="/supervisor/daily-logs" replace />;
     default:
       return <Navigate to="/login" replace />;
   }

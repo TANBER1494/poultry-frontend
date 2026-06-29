@@ -5,7 +5,7 @@ import { AuthContext } from '../context/AuthContext';
 // Map for default redirects based on user roles in the Poultry ERP system
 const ROLE_REDIRECT_MAP = {
   OWNER: '/owner/dashboard',
-  SUPERVISOR: '/supervisor/dashboard',
+  SUPERVISOR: '/supervisor/daily-logs',
   SUPER_ADMIN: '/admin/dashboard',
 };
 
