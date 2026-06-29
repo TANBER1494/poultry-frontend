@@ -1,7 +1,10 @@
 import axios from 'axios';
 
-// إعداد الرابط الأساسي للباك إند
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Standardized storage keys for the Poultry ERP system
+const TOKEN_KEY = 'poultry_access_token';
+const REFRESH_TOKEN_KEY = 'poultry_refresh_token';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -10,11 +13,10 @@ const api = axios.create({
   },
 });
 
-// متغيرات لمنع تداخل الطلبات أثناء تجديد التوكن
 let isRefreshing = false;
 let failedQueue = [];
 
-// دالة لمعالجة الطلبات المتوقفة أثناء عملية التجديد
+// Process queued requests after a successful token refresh
 const processQueue = (error, token = null) => {
   failedQueue.forEach(prom => {
     if (error) {
@@ -26,12 +28,10 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// ==========================================
-// 🛡️ 1. Interceptor للطلبات الخارجة (إضافة التوكن)
-// ==========================================
+// Request Interceptor: Attach access token to headers
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('dokkany_token');
+    const token = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -40,77 +40,77 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ==========================================
-// ♻️ 2. Interceptor للردود (التجديد الصامت)
-// ==========================================
+// Response Interceptor: Handle Errors (401 Auth, 402/403 Subscription)
 api.interceptors.response.use(
-  (response) => response, // إذا كان الرد ناجحاً، يمر بسلام
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // إذا كان الخطأ 401 (غير مصرح) ولم نقم بمحاولة تجديد سابقة لنفس الطلب
+    // إذا انتهى الاشتراك (402) أو تم إيقاف المزرعة إدارياً (403 بسبب LOCKED)
+ if (error.response?.status === 402 || (error.response?.status === 403 && error.response?.data?.status === 'LOCKED')) {
+      if (window.location.pathname !== '/owner/subscriptions') {
+        // تمرير رسالة الخطأ القادمة من الباك إند عبر الرابط
+        const errorMsg = error.response?.data?.message || 'انتهت صلاحية المزرعة، يرجى التجديد.';
+        window.location.href = `/owner/subscriptions?expired=true&msg=${encodeURIComponent(errorMsg)}`;
+      }
+      return Promise.reject(error);
+    }
+
+    // 🛡️ منطق تجديد التوكن (Refresh Token) للخطأ 401
     if (error.response?.status === 401 && !originalRequest._retry) {
-      // نمنع محاولة تجديد التوكن إذا كان الخطأ قادماً من مسارات تسجيل الدخول أو التجديد نفسه
       if (originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh')) {
         return Promise.reject(error);
       }
 
-      // إذا كانت عملية التجديد جارية بالفعل لطلب آخر، نضع هذا الطلب في طابور الانتظار
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });
-        })
-        .then(token => {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+        }).then(token => {
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
           return api(originalRequest);
-        })
-        .catch(err => {
+        }).catch(err => {
           return Promise.reject(err);
         });
       }
 
-     // 🚀 نبدأ عملية التجديد الصامتة
       originalRequest._retry = true;
       isRefreshing = true;
-      const refreshToken = localStorage.getItem('dokkany_refresh_token');
 
-      // 🛡️ حماية إضافية: التأكد من أن التوكن موجود وليس كلمة undefined
+      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY);
+
       if (!refreshToken || refreshToken === 'undefined' || refreshToken === 'null') {
         localStorage.clear();
+        sessionStorage.clear();
         window.location.href = '/login';
         return Promise.reject(error);
       }
 
       try {
-        // نطلب توكن جديد من الباك إند
         const { data } = await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refreshToken });
         
-        // حفظ المفاتيح الجديدة السليمة
-        localStorage.setItem('dokkany_token', data.token);
-        localStorage.setItem('dokkany_refresh_token', data.refresh_token);
+        // حفظ التوكن الجديد في المكان الذي كان فيه (Local أو Session)
+        const storage = localStorage.getItem(REFRESH_TOKEN_KEY) ? localStorage : sessionStorage;
+        storage.setItem(TOKEN_KEY, data.token);
+        storage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
         
-        // إعداد الهيدر للطلبات القادمة
         api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
         originalRequest.headers['Authorization'] = `Bearer ${data.token}`;
         
-        // إطلاق سراح الطلبات المتوقفة في الطابور
         processQueue(null, data.token);
         
-        // إعادة إرسال الطلب الأصلي الذي فشل
         return api(originalRequest);
         
       } catch (refreshError) {
-        // إذا فشل التجديد (مثلاً الـ Refresh Token انتهت صلاحيته بعد 30 يوم أو سُرق)
         processQueue(refreshError, null);
-        localStorage.clear(); // تنظيف المتصفح
-        window.location.href = '/login'; // طرد المستخدم لتسجيل الدخول من جديد
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
 
-    // لأي أخطاء أخرى، نمررها كما هي للفرونت إند للتعامل معها
     return Promise.reject(error);
   }
 );

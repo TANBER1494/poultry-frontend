@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { io } from 'socket.io-client';
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -8,49 +8,49 @@ const SOCKET_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace('/api', '')
   : 'http://localhost:5000';
 
-// تعريف الثوابت لمنع الأخطاء الإملائية 
 const STORAGE_KEYS = {
-  TOKEN: 'dokkany_token',
-  REFRESH_TOKEN: 'dokkany_refresh_token',
-  USER: 'dokkany_user'
+  TOKEN: 'poultry_access_token',
+  REFRESH_TOKEN: 'poultry_refresh_token',
+  USER: 'poultry_user'
 };
 
 export const AuthProvider = ({ children }) => {
-  // التهيئة البطيئة (Lazy Initialization) لقراءة البيانات من المتصفح مرة واحدة فقط
-  const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEYS.TOKEN));
-  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN));
+  // Read from localStorage first, fallback to sessionStorage
+  const [token, setToken] = useState(() => 
+    localStorage.getItem(STORAGE_KEYS.TOKEN) || sessionStorage.getItem(STORAGE_KEYS.TOKEN)
+  );
+  const [refreshToken, setRefreshToken] = useState(() => 
+    localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) || sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN)
+  );
   const [user, setUser] = useState(() => {
-    const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
+    const storedUser = localStorage.getItem(STORAGE_KEYS.USER) || sessionStorage.getItem(STORAGE_KEYS.USER);
     return storedUser ? JSON.parse(storedUser) : null;
   });
 
   const [socket, setSocket] = useState(null);
-  const loading = false; // البيانات تُقرأ بشكل متزامن، لا نحتاج لحالة تحميل حقيقية هنا
+  const loading = false; 
 
-  // إدارة الاتصال اللحظي وإعدادات إعادة الاتصال التلقائي
   useEffect(() => {
     let newSocket;
-
-    if (user) {
+    
+    if (user && token) {
       newSocket = io(SOCKET_URL, {
-        transports: ['websocket', 'polling'],
-        reconnectionAttempts: 5, // محاولة إعادة الاتصال 5 مرات عند انقطاع الإنترنت
-        reconnectionDelay: 2000, // الانتظار ثانيتين بين كل محاولة
+        auth: { token },
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
       });
 
       newSocket.on('connect', () => {
-        let room;
-        
-        // توجيه المستخدم لغرفته المخصصة بناءً على دوره المعماري
+        console.log('Socket connected successfully');
         if (user.role === 'SUPER_ADMIN') {
-          room = 'SUPER_ADMIN_ROOM';
+          newSocket.emit('joinRoom', 'SUPER_ADMIN_ROOM');
         } else if (user.role === 'OWNER') {
-          room = user.organization_id;
-        } else {
-          room = user._id || user.id;
+          newSocket.emit('joinRoom', user.organization_id);
+        } else if (user.role === 'SUPERVISOR') {
+          newSocket.emit('joinRoom', user.id || user._id); 
         }
-        
-        newSocket.emit('joinRoom', room);
         setSocket(newSocket);
       });
 
@@ -59,20 +59,31 @@ export const AuthProvider = ({ children }) => {
       });
     }
 
-    // تنظيف الاتصال عند تدمير المكون أو تسجيل الخروج
     return () => {
       if (newSocket) {
         newSocket.disconnect();
       }
     };
-  }, [user]);
+  }, [user, token]);
 
-  // استخدام useCallback لمنع إعادة التصيير غير الضروري للمكونات الفرعية
-  const login = useCallback((userData, accessToken, incomingRefreshToken) => {
-    localStorage.setItem(STORAGE_KEYS.TOKEN, accessToken);
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, incomingRefreshToken);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
-    localStorage.removeItem('dokkany_last_splash');
+  // Updated login function to accept rememberMe boolean
+  const login = useCallback((userData, accessToken, incomingRefreshToken, rememberMe = false) => {
+    const storage = rememberMe ? localStorage : sessionStorage;
+    
+    // Clear the opposite storage to prevent conflicts
+    if (rememberMe) {
+      sessionStorage.removeItem(STORAGE_KEYS.TOKEN);
+      sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+      sessionStorage.removeItem(STORAGE_KEYS.USER);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+      localStorage.removeItem(STORAGE_KEYS.USER);
+    }
+
+    storage.setItem(STORAGE_KEYS.TOKEN, accessToken);
+    storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, incomingRefreshToken);
+    storage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
     
     setToken(accessToken);
     setRefreshToken(incomingRefreshToken);
@@ -80,22 +91,46 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = useCallback(() => {
+    // Clear both storages on logout
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER);
-    sessionStorage.removeItem('dokkany_splash_seen');
+    
+    sessionStorage.removeItem(STORAGE_KEYS.TOKEN);
+    sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+    sessionStorage.removeItem(STORAGE_KEYS.USER);
+    
     setToken(null);
     setRefreshToken(null);
     setUser(null);
     
     if (socket) {
       socket.disconnect();
+      setSocket(null);
     }
   }, [socket]);
 
+  const contextValue = {
+    token,
+    refreshToken,
+    user,
+    loading,
+    socket,
+    login,
+    logout,
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, refreshToken, loading, login, logout, socket }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import './WhatsAppFloat.css';
 
 const WHATSAPP_NUMBER = '2001112793953';
-const DEFAULT_MESSAGE = 'مرحباً، أحتاج مساعدة بخصوص نظام دكاني';
+const DEFAULT_MESSAGE = 'مرحباً، أحتاج مساعدة بخصوص نظام إدارة المزارع';
 const AUTO_HIDE_DELAY = 4000; // ms before auto-retracting
 
 const WhatsAppFloat = () => {

@@ -1,363 +1,393 @@
-import { useState, useContext } from 'react';
-import {
-  User,
-  Phone,
-  Lock,
-  Building2,
-  Store,
-  MapPin,
-  UserPlus,
-  ArrowLeft,
-  ArrowRight,
-  ChevronLeft,
-  Loader2,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../../context/AuthContext';
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Phone, Mail, Lock, Eye, EyeOff, Loader2, Building2, Tractor, LayoutDashboard, ArrowRight, ArrowLeft } from 'lucide-react';
 import authService from '../../services/authService';
 import { showAlert } from '../../utils/alert';
-import logoImg from '../../assets/images/logo.png';
+import loginBackground from "../../assets/login_background.png";
+
 
 const RegisterOwner = () => {
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext);
 
   const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
   const [formData, setFormData] = useState({
-    owner_name: '',
+    name: '',
     phone: '',
+    email: '',
     password: '',
+    confirmPassword: '',
     organization_name: '',
-    branch_name: '',
-    branch_location: '',
+    farm_name: '',
   });
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const BACKGROUND_IMAGE_URL = loginBackground;
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleNextStep = () => {
-    if (!formData.owner_name || formData.owner_name.length < 3)
-      return showAlert.error('تنبيه', 'يرجى إدخال اسم المالك بشكل صحيح');
-    if (!/^01[0125][0-9]{8}$/.test(formData.phone))
-      return showAlert.error('تنبيه', 'صيغة رقم الهاتف غير صحيحة');
-    if (formData.password.length < 6)
-      return showAlert.error(
-        'تنبيه',
-        'كلمة المرور يجب ألا تقل عن 6 أحرف/أرقام'
-      );
+  const nextStep = () => {
+    //  1. Validation for Name
+    if (!formData.name.trim() || formData.name.length < 3) {
+      showAlert.error('خطأ في الإدخال', 'يرجى إدخال اسمك بالكامل (3 أحرف على الأقل)');
+      return;
+    }
+
+    //  2. Validation for Phone (Egyptian numbers standard)
+    const phoneRegex = /^(01[0125][0-9]{8})$/;
+    if (!phoneRegex.test(formData.phone)) {
+      showAlert.error('خطأ في الإدخال', 'يرجى إدخال رقم هاتف مصري صحيح (11 رقم)');
+      return;
+    }
+
+    //  3. Validation for Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      showAlert.error('خطأ في الإدخال', 'يرجى إدخال بريد إلكتروني صالح');
+      return;
+    }
+
     setStep(2);
+  };
+
+  const prevStep = () => {
+    setStep(1);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !formData.organization_name ||
-      !formData.branch_name ||
-      !formData.branch_location
-    ) {
-      return showAlert.error(
-        'بيانات ناقصة',
-        'يرجى إكمال جميع بيانات السوبر ماركت'
+    if (!formData.organization_name.trim() || !formData.farm_name.trim()) {
+      showAlert.error('بيانات ناقصة', 'يرجى إدخال اسم المؤسسة والمزرعة');
+      return;
+    }
+
+    //  4. Global Standard Validation for Password
+    // الأمان: 8 أحرف على الأقل، يحتوي على حرف واحد ورقم واحد على الأقل
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
+    if (!passwordRegex.test(formData.password)) {
+      showAlert.error(
+        'كلمة المرور ضعيفة', 
+        'يجب أن تتكون من 8 أحرف على الأقل، وتتضمن حروفاً وأرقاماً لضمان أمان مزرعتك'
       );
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      showAlert.error('كلمة المرور غير متطابقة', 'يرجى التأكد من كتابة كلمة المرور بشكل متطابق في الحقلين');
+      return;
     }
 
     try {
       setIsLoading(true);
-      showAlert.loading('جاري تأسيس النظام وتهيئة قاعدة البيانات...');
+      
+      const payload = {
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        organization_name: formData.organization_name.trim(),
+        farm_name: formData.farm_name.trim(),
+      };
 
-      const response = await authService.registerOwner(formData);
+      const response = await authService.registerOwner(payload);
 
-      login(response.user, response.token);
+      showAlert.success('تم التسجيل المبدئي بنجاح', response.message || 'يرجى تفقد بريدك الإلكتروني لإدخال كود التفعيل');
+      
+      // التوجيه المعماري الصحيح: نرسله لصفحة التفعيل مع تمرير الإيميل في الخلفية
+      navigate('/verify-registration', { 
+        replace: true, 
+        state: { email: payload.email } 
+      });
 
-      await showAlert.success(
-        'عملية ناجحة!',
-        response.message || 'تم تأسيس النظام بنجاح!'
-      );
-      navigate('/owner/dashboard');
     } catch (error) {
-      showAlert.error('فشل الانشاء', error.message);
+      const errorMessage = error.response?.data?.message || 'تعذر الاتصال بالخادم، يرجى المحاولة لاحقاً';
+      showAlert.error('فشل التسجيل', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const variants = {
+    enter: (direction) => ({ x: direction > 0 ? 50 : -50, opacity: 0 }),
+    center: { zIndex: 1, x: 0, opacity: 1 },
+    exit: (direction) => ({ zIndex: 0, x: direction < 0 ? 50 : -50, opacity: 0 }),
+  };
+
   return (
-    <div className="h-[100dvh] w-full flex items-center justify-center p-0 md:p-4 arabic-direct bg-slate-50 dark:bg-slate-950 overflow-hidden transition-colors duration-300">
-      <div className="w-full h-full md:h-auto md:max-w-md bg-white dark:bg-slate-900 md:rounded-[40px] overflow-hidden shadow-indigo-100 dark:shadow-none md:shadow-2xl relative flex flex-col justify-between animate-slide-up-fade border border-transparent dark:border-slate-800 transition-colors duration-300">
-        <div className="flex-grow flex flex-col justify-center">
-          <div className="absolute top-0 left-0 w-full h-[110px] z-0 pointer-events-none opacity-100 dark:opacity-80 transition-opacity">
-            <svg
-              viewBox="0 0 500 150"
-              preserveAspectRatio="none"
-              className="h-full w-full"
-            >
-              <defs>
-                <linearGradient
-                  id="gradient-reg"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="0%"
-                >
-                  <stop
-                    offset="0%"
-                    style={{ stopColor: '#4f46e5', stopOpacity: 1 }}
-                  />
-                  <stop
-                    offset="100%"
-                    style={{ stopColor: '#312e81', stopOpacity: 1 }}
-                  />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0.00,49.98 C149.99,150.00 349.20,-49.98 500.00,49.98 L500.00,0.00 L0.00,0.00 Z"
-                style={{ stroke: 'none', fill: 'url(#gradient-reg)' }}
-              ></path>
-            </svg>
-          </div>
+    // التعديل السحري هنا: إضافة h-[100dvh] و overflow-y-auto للتحكم في التمرير محلياً
+    <div className="relative flex h-[100dvh] w-full overflow-y-auto bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      
+      {/* Mobile Background: الثبات الكامل للخلفية أثناء التمرير */}
+      <div
+        className="fixed inset-0 z-0 block bg-cover bg-center bg-no-repeat lg:hidden"
+        style={{ backgroundImage: `url('${BACKGROUND_IMAGE_URL}')` }}
+      >
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px]"></div>
+      </div>
 
-          <div className="relative z-10 text-center mt-6 mb-4 px-8 md:px-14">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white dark:bg-slate-800 p-2 mb-2 shadow-xl shadow-indigo-100 dark:shadow-indigo-900/20 border border-slate-100 dark:border-slate-700 transition-colors">
-              <img
-                src={logoImg}
-                alt="دكاني"
-                style={{
-                  width: '130px',
-                  height: 'auto',
-                  minWidth: '110px',
-                  display: 'block',
-                }}
-                className="object-contain drop-shadow-md"
-              />
+      {/* Right Side: Form Container (أصبح مرناً ويسمح بالتمرير) */}
+      <div className="relative z-10 flex w-full flex-col justify-center px-4 py-12 sm:px-6 lg:w-1/2 lg:bg-white lg:px-12 xl:px-16 dark:lg:bg-slate-950 min-h-full">
+        
+        <div className="mx-auto w-full max-w-md my-auto rounded-[2rem] bg-white/95 px-6 py-8 shadow-2xl backdrop-blur-xl dark:bg-slate-900/95 sm:px-10 lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0 lg:shadow-none dark:lg:bg-transparent dark:lg:backdrop-blur-none">
+          
+          {/* Header & Logo */}
+          <div className="mb-8 text-center lg:text-right">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 lg:mx-0 shadow-inner">
+              <LayoutDashboard className="h-8 w-8" />
             </div>
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">
-              انشاء حساب جديد
-            </h2>
-
-            <div className="flex items-center justify-center gap-2 mt-2">
-              <div
-                className={`h-1.5 rounded-full transition-all duration-500 ${step === 1 ? 'w-8 bg-indigo-600 dark:bg-indigo-500' : 'w-2 bg-slate-200 dark:bg-slate-700'}`}
-              ></div>
-              <div
-                className={`h-1.5 rounded-full transition-all duration-500 ${step === 2 ? 'w-8 bg-indigo-600 dark:bg-indigo-500' : 'w-2 bg-slate-200 dark:bg-slate-700'}`}
-              ></div>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              تأسيس نظام جديد
+            </h1>
+            <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">
+              {step === 1 ? 'الخطوة 1 من 2: بياناتك الشخصية' : 'الخطوة 2 من 2: بيانات المزرعة والأمان'}
+            </p>
+            
+            {/* Progress Bar */}
+            <div className="mt-4 flex gap-2 w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all duration-500 w-1/2"></div>
+              <div className={`h-full bg-emerald-500 transition-all duration-500 w-1/2 ${step === 2 ? 'opacity-100' : 'opacity-0'}`}></div>
             </div>
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="px-8 mb-2 flex-grow flex flex-col justify-center"
-          >
-            {step === 1 && (
-              <div className="space-y-4 animate-fade-in-rapid">
-                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 text-center transition-colors">
-                  الخطوة 1: بيانات الدخول الخاصة بك
-                </h3>
-
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="owner_name"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    الاسم
-                  </label>
-                  <div className="relative">
-                    <User className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-                    <input
-                      id="owner_name"
-                      value={formData.owner_name}
-                      onChange={handleChange}
-                      type="text"
-                      placeholder="الاسم الرباعي"
-                      className="w-full pr-10 pl-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-right font-bold text-base transition-all"
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="phone"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    رقم الموبايل
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-                    <input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      type="tel"
-                      placeholder="رقم الهاتف"
-                      className="w-full pr-10 pl-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-left font-bold text-base transition-all"
-                      disabled={isLoading}
-                      dir="ltr"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="password"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    كلمة السر / الـ PIN
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-
-                    {/* تعديل الحقل وإضافة padding يسار (pl-12) */}
-                    <input
-                      id="password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="********"
-                      className="w-full pr-10 pl-12 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-left font-bold tracking-widest text-base transition-all"
-                      disabled={isLoading}
-                      dir="ltr"
-                    />
-
-                    {/* زر إظهار/إخفاء كلمة المرور */}
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors z-10"
-                      tabIndex="-1"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleNextStep}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 mt-2 bg-indigo-600 dark:bg-indigo-500 text-white text-base font-black rounded-2xl shadow-lg shadow-indigo-500/30 dark:shadow-none hover:bg-indigo-700 dark:hover:bg-indigo-600 active:scale-95 transition-all"
+          {/* Form Content */}
+          <form onSubmit={step === 1 ? (e) => { e.preventDefault(); nextStep(); } : handleSubmit} className="space-y-4">
+            <AnimatePresence mode="wait" custom={step === 1 ? -1 : 1}>
+              {step === 1 && (
+                <motion.div
+                  key="step1"
+                  custom={-1}
+                  variants={variants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4"
                 >
-                  التالي <ChevronLeft className="w-5 h-5" />
-                </button>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="space-y-4 animate-fade-in-rapid">
-                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 text-center transition-colors">
-                  الخطوة 2: بيانات السوبر ماركت
-                </h3>
-
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="organization_name"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    اسم المحل
-                  </label>
-                  <div className="relative">
-                    <Building2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-                    <input
-                      id="organization_name"
-                      value={formData.organization_name}
-                      onChange={handleChange}
-                      type="text"
-                      placeholder="مثال: ماركت النور"
-                      className="w-full pr-10 pl-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-right font-bold text-base transition-all"
-                      disabled={isLoading}
-                    />
+                  {/* Name Input */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">الاسم بالكامل</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="name"
+                        type="text"
+                        placeholder="محمد عبدالخالق"
+                        value={formData.name}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="branch_name"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    اسم الفرع
-                  </label>
-                  <div className="relative">
-                    <Store className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-                    <input
-                      id="branch_name"
-                      value={formData.branch_name}
-                      onChange={handleChange}
-                      type="text"
-                      placeholder="مثال: الرئيسي"
-                      className="w-full pr-10 pl-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-right font-bold text-base transition-all"
-                      disabled={isLoading}
-                    />
+                  {/* Phone Input */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">رقم الهاتف</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Phone className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="phone"
+                        type="tel"
+                        dir="ltr"
+                        placeholder="01xxxxxxxxx"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1 group">
-                  <label
-                    htmlFor="branch_location"
-                    className="block text-sm font-black text-slate-700 dark:text-slate-300 pr-2 transition-colors"
-                  >
-                    الموقع
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400 z-10 transition-colors" />
-                    <input
-                      id="branch_location"
-                      value={formData.branch_location}
-                      onChange={handleChange}
-                      type="text"
-                      placeholder="مثال: شارع المحطة"
-                      className="w-full pr-10 pl-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-white focus:border-indigo-600 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-600/10 dark:focus:ring-indigo-500/20 outline-none text-right font-bold text-base transition-all"
-                      disabled={isLoading}
-                    />
+                  {/* Email Input */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">البريد الإلكتروني</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Mail className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="email"
+                        type="email"
+                        dir="ltr"
+                        placeholder="example@mail.com"
+                        value={formData.email}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex gap-3 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    disabled={isLoading}
-                    className="w-1/3 flex items-center justify-center py-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
                   <button
                     type="submit"
-                    disabled={isLoading}
-                    className="w-2/3 flex items-center justify-center gap-2 py-3.5 bg-indigo-600 dark:bg-indigo-500 text-white font-black rounded-2xl shadow-lg shadow-indigo-500/30 dark:shadow-none hover:bg-indigo-700 dark:hover:bg-indigo-600 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="mt-6 group relative flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/30"
                   >
-                    {isLoading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <UserPlus className="w-5 h-5" />
-                    )}
-                    {isLoading ? 'جاري التأسيس...' : 'انشاء'}
+                    التالي <ArrowLeft className="w-4 h-4" />
                   </button>
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+
+              {step === 2 && (
+                <motion.div
+                  key="step2"
+                  custom={1}
+                  variants={variants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4"
+                >
+                  {/* Organization & Farm */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">اسم المؤسسة</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="organization_name"
+                        type="text"
+                        placeholder="مؤسسة الحمد"
+                        value={formData.organization_name}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">اسم المزرعة الأولى</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Tractor className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="farm_name"
+                        type="text"
+                        placeholder="مزرعة الهيشة"
+                        value={formData.farm_name}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">كلمة المرور</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Lock className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        dir="ltr"
+                        placeholder="••••••••"
+                        value={formData.password}
+                        onChange={handleChange}
+                        className="block w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-bold text-slate-700 dark:text-slate-300">تأكيد كلمة المرور</label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-slate-400">
+                        <Lock className="h-5 w-5" />
+                      </div>
+                      <input
+                        name="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        dir="ltr"
+                        placeholder="••••••••"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        className={`block w-full rounded-xl border bg-slate-50 py-3.5 pl-12 pr-12 text-sm font-medium text-slate-900 outline-none transition-all focus:bg-white focus:ring-2 dark:bg-slate-800 dark:text-white ${
+                          formData.confirmPassword && formData.password !== formData.confirmPassword 
+                          ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 dark:border-red-500' 
+                          : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-slate-700 dark:focus:border-emerald-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={prevStep}
+                      className="flex-shrink-0 flex items-center justify-center w-14 rounded-xl bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    >
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="flex-1 group relative flex justify-center rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'إنشاء الحساب'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <p className="mt-6 text-center text-sm font-medium text-slate-600 dark:text-slate-400 pt-2">
+              لديك حساب بالفعل؟{' '}
+              <Link to="/login" className="font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400">
+                تسجيل الدخول
+              </Link>
+            </p>
           </form>
         </div>
+      </div>
 
-        <div className="py-5 border-t border-slate-100 dark:border-slate-800 text-center px-8 bg-slate-50/50 dark:bg-slate-900/50 transition-colors">
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-black hover:gap-3 transition-all text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            العودة لتسجيل الدخول
-          </Link>
+      {/* Left Side: Desktop Background Image */}
+      <div 
+        className="hidden bg-cover bg-center bg-no-repeat lg:block lg:w-1/2 fixed top-0 bottom-0 left-0"
+        style={{ backgroundImage: `url('${BACKGROUND_IMAGE_URL}')` }}
+      >
+        <div className="absolute inset-0 bg-slate-900/40 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent"></div>
+        
+        <div className="absolute bottom-0 left-0 right-0 p-16 text-white">
+          <h2 className="mb-4 text-4xl font-black leading-tight text-white/95">
+            ابدأ رحلتك نحو <br /> الإدارة الذكية
+          </h2>
+          <p className="max-w-md text-lg font-medium leading-relaxed text-slate-200">
+            خطوة واحدة تفصلك عن التحكم الكامل في مزارعك، تتبع دورات الإنتاج، وزيادة أرباحك بكفاءة عالية.
+          </p>
         </div>
       </div>
+
     </div>
   );
 };

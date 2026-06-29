@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-// بيانات مشروع "دكاني" الخاصة بك
 const firebaseConfig = {
   apiKey: "AIzaSyBf8K0Zsvge_H87J3JVTdgmtMBR-5hfXLA",
   authDomain: "dokkany-47a0e.firebaseapp.com",
