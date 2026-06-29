@@ -19,18 +19,20 @@ export const requestForToken = async () => {
   if (!messaging) return null;
   
   try {
+    //  طلب الإذن أولاً من المستخدم
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.warn('تم رفض صلاحية الإشعارات من المستخدم');
+      return null;
+    }
+
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    
     const currentToken = await getToken(messaging, { 
       vapidKey: 'BIXHbmvurh4OEtT58RB1eLlv7pk-nbnu56JRVMEy8fBs3Ct9dC0GASSAgzy0CSMsSzcez-r9b8ppxNa9HeyT8CY',
       serviceWorkerRegistration: registration 
     });
     
-    if (currentToken) {
-      return currentToken;
-    } else {
-      return null;
-    }
+    return currentToken || null;
   } catch (err) {
     console.error('❌ خطأ في استخراج التوكن:', err);
     return null;
