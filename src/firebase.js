@@ -45,10 +45,8 @@ export const requestForToken = async () => {
 
     return currentToken || null;
   } catch (err) {
-    console.error(err);
-    console.error('name:', err.name);
-    console.error('message:', err.message);
-    console.error('stack:', err.stack);
+    console.error('❌ خطأ في استخراج التوكن:', err);
+    return null;
   }
 };
 
