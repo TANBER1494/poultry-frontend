@@ -1,9 +1,9 @@
 /* ==============================================================
-   Driver.js Custom Dokkany Theme (Modern UI & Dark Mode)
+   Driver.js Custom Poultry Theme (Modern UI & Dark Mode)
    ============================================================== */
 
 /* 1. Popover Container */
-.driver-popover.dokkany-custom-tour {
+.driver-popover.poultry-custom-tour {
   border-radius: 24px !important;
   padding: 24px !important;
   background-color: #ffffff !important;
@@ -12,55 +12,55 @@
   font-family: inherit !important;
 }
 
-.dark .driver-popover.dokkany-custom-tour {
+.dark .driver-popover.poultry-custom-tour {
   background-color: #1e293b !important;
   border-color: #334155 !important;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* 2. Typography */
-.dokkany-custom-tour .driver-popover-title {
+.poultry-custom-tour .driver-popover-title {
   font-size: 18px !important;
   font-weight: 900 !important;
   color: #1e293b !important;
   margin-bottom: 10px !important;
 }
 
-.dark .dokkany-custom-tour .driver-popover-title {
+.dark .poultry-custom-tour .driver-popover-title {
   color: #f8fafc !important;
 }
 
-.dokkany-custom-tour .driver-popover-description {
+.poultry-custom-tour .driver-popover-description {
   font-size: 14px !important;
   font-weight: 600 !important;
   color: #64748b !important;
   line-height: 1.6 !important;
 }
 
-.dark .dokkany-custom-tour .driver-popover-description {
+.dark .poultry-custom-tour .driver-popover-description {
   color: #94a3b8 !important;
 }
 
 /* 3. Footer Area */
-.dokkany-custom-tour .driver-popover-footer {
+.poultry-custom-tour .driver-popover-footer {
   margin-top: 24px !important;
   align-items: center !important;
 }
 
-.dokkany-custom-tour .driver-popover-progress-text {
+.poultry-custom-tour .driver-popover-progress-text {
   font-size: 13px !important;
   font-weight: 700 !important;
   color: #94a3b8 !important;
 }
 
 /* 4. Buttons Container */
-.dokkany-custom-tour .driver-popover-navigation-btns {
+.poultry-custom-tour .driver-popover-navigation-btns {
   gap: 12px !important;
 }
 
 /* 5. Next & Done Button (Primary) */
-.dokkany-custom-tour .driver-popover-next-btn {
-  background-color: #4f46e5 !important; /* Indigo 600 */
+.poultry-custom-tour .driver-popover-next-btn {
+  background-color: #10b981 !important; /* Emerald 500 للمزرعة بدلاً من النيلي */
   color: #ffffff !important;
   border-radius: 14px !important;
   padding: 10px 24px !important;
@@ -68,20 +68,20 @@
   font-size: 14px !important;
   border: none !important;
   text-shadow: none !important;
-  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3) !important;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.3) !important;
   transition: all 0.2s ease !important;
   cursor: pointer !important;
 }
 
-.dokkany-custom-tour .driver-popover-next-btn:hover {
-  background-color: #4338ca !important; /* Indigo 700 */
+.poultry-custom-tour .driver-popover-next-btn:hover {
+  background-color: #059669 !important; /* Emerald 600 */
   transform: translateY(-2px) !important;
 }
 
 /* 6. Previous Button (Secondary) */
-.dokkany-custom-tour .driver-popover-prev-btn {
-  background-color: #f1f5f9 !important; /* Slate 100 */
-  color: #475569 !important; /* Slate 600 */
+.poultry-custom-tour .driver-popover-prev-btn {
+  background-color: #f1f5f9 !important; 
+  color: #475569 !important; 
   border-radius: 14px !important;
   padding: 10px 20px !important;
   font-weight: 800 !important;
@@ -93,27 +93,27 @@
   cursor: pointer !important;
 }
 
-.dokkany-custom-tour .driver-popover-prev-btn:hover {
-  background-color: #e2e8f0 !important; /* Slate 200 */
+.poultry-custom-tour .driver-popover-prev-btn:hover {
+  background-color: #e2e8f0 !important; 
   color: #1e293b !important;
 }
 
-.dark .dokkany-custom-tour .driver-popover-prev-btn {
-  background-color: #334155 !important; /* Slate 700 */
-  color: #cbd5e1 !important; /* Slate 300 */
+.dark .poultry-custom-tour .driver-popover-prev-btn {
+  background-color: #334155 !important; 
+  color: #cbd5e1 !important; 
 }
 
-.dark .dokkany-custom-tour .driver-popover-prev-btn:hover {
-  background-color: #475569 !important; /* Slate 600 */
+.dark .poultry-custom-tour .driver-popover-prev-btn:hover {
+  background-color: #475569 !important; 
   color: #ffffff !important;
 }
 
-/* 7. Close Button (X in corner if enabled) */
-.dokkany-custom-tour .driver-popover-close-btn {
+/* 7. Close Button */
+.poultry-custom-tour .driver-popover-close-btn {
   color: #94a3b8 !important;
   transition: color 0.2s !important;
 }
 
-.dokkany-custom-tour .driver-popover-close-btn:hover {
-  color: #ef4444 !important; /* Red 500 */
+.poultry-custom-tour .driver-popover-close-btn:hover {
+  color: #ef4444 !important; 
 }

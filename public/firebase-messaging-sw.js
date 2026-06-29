@@ -6,13 +6,14 @@ importScripts(
   'https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging-compat.js'
 );
 
+// 🛡️ التعديل: مفاتيح مشروع مزرعة الدواجن الجديد
 firebase.initializeApp({
-  apiKey: 'AIzaSyBf8K0Zsvge_H87J3JVTdgmtMBR-5hfXLA',
-  authDomain: 'dokkany-47a0e.firebaseapp.com',
-  projectId: 'dokkany-47a0e',
-  storageBucket: 'dokkany-47a0e.firebasestorage.app',
-  messagingSenderId: '94415362969',
-  appId: '1:94415362969:web:44b627ee275f737f2b1108',
+  apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
+  authDomain: "poultry-farm-erp.firebaseapp.com",
+  projectId: "poultry-farm-erp",
+  storageBucket: "poultry-farm-erp.firebasestorage.app", 
+  messagingSenderId: "541973591769", 
+  appId: "1:541973591769:web:e273d5a1fb717c5ac630c8"
 });
 
 const messaging = firebase.messaging();

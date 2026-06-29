@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext'; 
 import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes/AppRoutes';
+import SplashScreen from './components/SplashScreen';
 
 function App() {
   return (
@@ -16,7 +17,10 @@ function App() {
               style: { fontFamily: 'inherit', fontSize: '1rem' }
             }} 
           />
-          <AppRoutes />
+          {/* تغليف المسارات بالـ SplashScreen لتعمل بسلاسة */}
+          <SplashScreen>
+            <AppRoutes />
+          </SplashScreen>
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>

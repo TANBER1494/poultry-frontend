@@ -1,7 +1,6 @@
 import api from './api';
 
 const notificationService = {
-  // جلب آخر الإشعارات للمستخدم الحالي
   getNotifications: async () => {
     try {
       const response = await api.get('/notifications');
@@ -11,7 +10,6 @@ const notificationService = {
     }
   },
 
-  // تحديد إشعار واحد كمقروء
   markAsRead: async (id) => {
     try {
       const response = await api.put(`/notifications/${id}/read`);
@@ -21,7 +19,6 @@ const notificationService = {
     }
   },
 
-  // تحديد كل الإشعارات كمقروءة
   markAllAsRead: async () => {
     try {
       const response = await api.put('/notifications/read-all');
@@ -31,7 +28,6 @@ const notificationService = {
     }
   },
 
-  // حذف إشعار واحد
   deleteNotification: async (id) => {
     try {
       const response = await api.delete(`/notifications/${id}`);
@@ -41,7 +37,6 @@ const notificationService = {
     }
   },
 
-  // حذف كل الإشعارات المقروءة
   deleteAllRead: async () => {
     try {
       const response = await api.delete('/notifications/read');
@@ -50,6 +45,17 @@ const notificationService = {
       throw new Error('فشل تنظيف الإشعارات');
     }
   },
+
+  //  التعديل 2: دالة جديدة لحفظ التوكن في الباك إند
+  saveFcmToken: async (token) => {
+    try {
+      // افترضت أن لديك مسار في الباك إند لتحديث بيانات المستخدم أو حفظ التوكن
+      const response = await api.post('/notifications/register-token', { fcm_token: token });
+      return response.data;
+    } catch (error) {
+      console.warn('فشل تسجيل التوكن في السيرفر');
+    }
+  }
 };
 
 export default notificationService;

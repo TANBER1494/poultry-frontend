@@ -1,31 +1,30 @@
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
+// 🛡️ التعديل 1: استخدام مفاتيح مشروع مزرعة الدواجن
 const firebaseConfig = {
-  apiKey: "AIzaSyBf8K0Zsvge_H87J3JVTdgmtMBR-5hfXLA",
-  authDomain: "dokkany-47a0e.firebaseapp.com",
-  projectId: "dokkany-47a0e",
-  storageBucket: "dokkany-47a0e.firebasestorage.app",
-  messagingSenderId: "94415362969",
-  appId: "1:94415362969:web:44b627ee275f737f2b1108"
+  apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
+  authDomain: "poultry-farm-erp.firebaseapp.com",
+  projectId: "poultry-farm-erp",
+  // ⚠️ تنبيه: يجب إحضار هذه الثلاث قيم من إعدادات مشروع فايربيز الخاص بالمزرعة
+  storageBucket: "poultry-farm-erp.firebasestorage.app", 
+  messagingSenderId: "541973591769", 
+  appId: "1:541973591769:web:e273d5a1fb717c5ac630c8" 
 };
 
 const app = initializeApp(firebaseConfig);
 
-// تهيئة الإشعارات (متوافقة مع المتصفحات المدعومة فقط)
 export const messaging = typeof window !== 'undefined' && 'Notification' in window ? getMessaging(app) : null;
 
-// دالة استخراج إحداثيات الموبايل (FCM Token)
 export const requestForToken = async () => {
   if (!messaging) return null;
   
   try {
-    // 🚀 إجبار المتصفح على تسجيل الجندي الخفي (Service Worker) بوضوح
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     
     const currentToken = await getToken(messaging, { 
-      vapidKey: 'BO14ZnAZpnm5lQ4hMW7n4BMCT0_-MNFsghWcT1vNICwp2Nw5gjB-fg7Tqxu9j15brsgu3MLms14Gs3RUG79WUEM',
-      serviceWorkerRegistration: registration // 
+      vapidKey: 'BAEpQHo-ZlZlvtG8xYNJ3TdB5bKhtB9DW2iPs-dzG_0YNdKmCnXrD-15TlwfqFCETm5t1MobOqlDk-l0L_d8gSQ',
+      serviceWorkerRegistration: registration 
     });
     
     if (currentToken) {
@@ -39,7 +38,6 @@ export const requestForToken = async () => {
   }
 };
 
-// دالة استلام الإشعارات والتطبيق مفتوح أمام المستخدم
 export const onMessageListener = () =>
   new Promise((resolve) => {
     if (!messaging) return;

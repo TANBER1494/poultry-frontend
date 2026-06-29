@@ -6,30 +6,30 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // لتحديث التطبيق تلقائياً عند رفع كود جديد
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'], // الأصول الأساسية
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'pwa-192x192.png', 'pwa-512x512.png'], // تأكد من توفر هذه الصور في مجلد public
       manifest: {
-        name: 'دكاني - نظام إدارة المبيعات', // الاسم الكامل
-        short_name: 'دكاني', // الاسم القصير الذي سيظهر تحت الأيقونة في الموبايل
-        description: 'أدر مبيعاتك ومخزونك بذكاء وسهولة',
-        theme_color: '#4f46e5', // لون الشريط العلوي للموبايل (Indigo-600)
-        background_color: '#ffffff', // لون شاشة التحميل (Splash Screen)
-        display: 'standalone', // هذه الكلمة السحرية التي تخفي شريط المتصفح!
-        dir: 'rtl', // لدعم اللغة العربية بشكل كامل
+        name: 'مزرعتي | Mazraaty',
+        short_name: 'مزرعتي',
+        description: 'نظام الإدارة المتكامل لمزارع الدواجن',
+        theme_color: '#4f46e5',
+        background_color: '#ffffff',
+        display: 'standalone', // هذه الخاصية هي التي تخفي شريط المتصفح وتجعله تطبيق مستقل
+        orientation: 'portrait',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable' // مهم جداً لأندرويد لتكييف شكل الأيقونة
+            purpose: 'any maskable'
           }
         ]
       }
     })
-  ]
+  ],
 });
