@@ -3,7 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext'; 
 import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes/AppRoutes';
-import SplashScreen from './components/SplashScreen';
+import SplashScreen from '../src/components/layout/SplashScreen';
 
 function App() {
   return (
