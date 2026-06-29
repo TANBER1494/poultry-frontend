@@ -3,13 +3,12 @@ import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 //  التعديل 1: استخدام مفاتيح مشروع مزرعة الدواجن
 const firebaseConfig = {
-  apiKey: "AIzaSyBf8K0Zsvge_H87J3JVTdgmtMBR-5hfXLA",
-  authDomain: "dokkany-47a0e.firebaseapp.com",
-  projectId: "dokkany-47a0e",
-  storageBucket: "dokkany-47a0e.firebasestorage.app",
-  messagingSenderId: "94415362969",
-  appId: "1:94415362969:web:44b627ee275f737f2b1108",
-  measurementId: "G-T4QKG4BGX3"
+  apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
+  authDomain: "poultry-farm-erp.firebaseapp.com",
+  projectId: "poultry-farm-erp",
+  storageBucket: "poultry-farm-erp.firebasestorage.app", 
+  messagingSenderId: "541973591769", 
+  appId: "1:541973591769:web:e273d5a1fb717c5ac630c8" 
 };
 
 const app = initializeApp(firebaseConfig);
@@ -29,7 +28,7 @@ export const requestForToken = async () => {
 
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     const currentToken = await getToken(messaging, { 
-      vapidKey: 'BO14ZnAZpnm5lQ4hMW7n4BMCT0_-MNFsghWcT1vNICwp2Nw5gjB-fg7Tqxu9j15brsgu3MLms14Gs3RUG79WUEM',
+      vapidKey: 'BIXHbmvurh4OEtT58RB1eLlv7pk-nbnu56JRVMEy8fBs3Ct9dC0GASSAgzy0CSMsSzcez-r9b8ppxNa9HeyT8CY',
       serviceWorkerRegistration: registration 
     });
     
