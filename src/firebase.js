@@ -6,7 +6,6 @@ const firebaseConfig = {
   apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
   authDomain: "poultry-farm-erp.firebaseapp.com",
   projectId: "poultry-farm-erp",
-  // ⚠️ تنبيه: يجب إحضار هذه الثلاث قيم من إعدادات مشروع فايربيز الخاص بالمزرعة
   storageBucket: "poultry-farm-erp.firebasestorage.app", 
   messagingSenderId: "541973591769", 
   appId: "1:541973591769:web:e273d5a1fb717c5ac630c8" 
@@ -23,7 +22,7 @@ export const requestForToken = async () => {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     
     const currentToken = await getToken(messaging, { 
-      vapidKey: 'BAEpQHo-ZlZlvtG8xYNJ3TdB5bKhtB9DW2iPs-dzG_0YNdKmCnXrD-15TlwfqFCETm5t1MobOqlDk-l0L_d8gSQ',
+      vapidKey: 'BIXHbmvurh4OEtT58RB1eLlv7pk-nbnu56JRVMEy8fBs3Ct9dC0GASSAgzy0CSMsSzcez-r9b8ppxNa9HeyT8CY',
       serviceWorkerRegistration: registration 
     });
     
