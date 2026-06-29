@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-// 🛡️ التعديل 1: استخدام مفاتيح مشروع مزرعة الدواجن
+//  التعديل 1: استخدام مفاتيح مشروع مزرعة الدواجن
 const firebaseConfig = {
   apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
   authDomain: "poultry-farm-erp.firebaseapp.com",

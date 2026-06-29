@@ -6,7 +6,7 @@ importScripts(
   'https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging-compat.js'
 );
 
-// 🛡️ التعديل: مفاتيح مشروع مزرعة الدواجن الجديد
+//  التعديل: مفاتيح مشروع مزرعة الدواجن الجديد
 firebase.initializeApp({
   apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
   authDomain: "poultry-farm-erp.firebaseapp.com",
