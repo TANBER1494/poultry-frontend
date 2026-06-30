@@ -13,24 +13,23 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-//  تم حذف onBackgroundMessage بالكامل ليعمل السلوك الافتراضي السليم (مثل دكاني)
-
 // ==============================================================
-// تفعيل الضغط على الإشعارات كاحتياطي إضافي
+//  استلام ضغطة المستخدم على الإشعار وفتح الرابط بدقة
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // جلب الرابط من الإشعار الافتراضي
   let targetUrl = '/';
-  if (event.notification?.data?.FCM_MSG?.notification?.click_action) {
-     targetUrl = event.notification.data.FCM_MSG.notification.click_action;
-  } else if (event.notification?.click_action) {
-     targetUrl = event.notification.click_action;
+  
+  // استخراج الرابط من كائن البيانات المُرسل من الباك إند بطريقة آمنة
+  const fcmData = event.notification.data?.FCM_MSG?.data;
+  if (fcmData && fcmData.click_action) {
+    targetUrl = fcmData.click_action;
   }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        // إذا كان التطبيق مفتوحاً بالفعل في الخلفية، قم بإيقاظه وتغيير مساره
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
           if (client.url.includes(self.location.origin) && 'focus' in client) {
@@ -38,6 +37,7 @@ self.addEventListener('notificationclick', function (event) {
             return client.focus();
           }
         }
+        // إذا كان التطبيق مغلقاً تماماً، افتح نافذة جديدة على الرابط
         if (clients.openWindow) {
           return clients.openWindow(targetUrl);
         }
