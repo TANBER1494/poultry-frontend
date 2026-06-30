@@ -8,10 +8,10 @@ import {
   Loader2,
   Save,
   LogOut,
-  Bell,
   Moon,
   Sun,
   ChevronDown,
+  Monitor, // أيقونة جديدة لقسم المظهر
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import settingsService from '../../services/settingsService';
@@ -20,8 +20,7 @@ import { showAlert } from '../../utils/alert';
 const OwnerSettings = () => {
   const { logout } = useAuth();
 
-  // حالة التحكم في فتح وإغلاق القوائم
-  const [openSection, setOpenSection] = useState('profile'); // يفتح قسم الملف الشخصي افتراضياً
+  const [openSection, setOpenSection] = useState('profile');
 
   const [profileData, setProfileData] = useState({ name: '', phone: '' });
   const [passwordData, setPasswordData] = useState({
@@ -29,15 +28,10 @@ const OwnerSettings = () => {
     new_password: '',
     confirm_password: '',
   });
+
+  // تم تنظيف كائن preferences من تعقيدات الإشعارات
   const [preferences, setPreferences] = useState({
     is_dark_mode: false,
-    notifications: {
-      cycle_started: true,
-      cycle_ended: true,
-      high_mortality: true,
-      large_expense: true,
-      feed_delivery: true,
-    },
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -54,13 +48,6 @@ const OwnerSettings = () => {
           setProfileData({ name: res.name || '', phone: res.phone || '' });
           setPreferences({
             is_dark_mode: res.is_dark_mode || false,
-            notifications: res.notifications || {
-              cycle_started: true,
-              cycle_ended: true,
-              high_mortality: true,
-              large_expense: true,
-              feed_delivery: true,
-            },
           });
         }
       } catch (error) {
@@ -124,24 +111,21 @@ const OwnerSettings = () => {
     }
   };
 
-  const handleTogglePref = async (type, key) => {
-    const updatedPrefs = { ...preferences };
-    if (type === 'theme') {
-      updatedPrefs.is_dark_mode = !updatedPrefs.is_dark_mode;
-    } else {
-      updatedPrefs.notifications[key] = !updatedPrefs.notifications[key];
-    }
-
-    setPreferences(updatedPrefs);
+  // دالة تغيير الثيم أصبحت أبسط
+  const handleToggleTheme = async () => {
+    const updatedDarkMode = !preferences.is_dark_mode;
+    setPreferences({ is_dark_mode: updatedDarkMode });
 
     try {
       setIsPrefSubmitting(true);
       await settingsService.updatePreferences({
-        is_dark_mode: updatedPrefs.is_dark_mode,
-        notifications: updatedPrefs.notifications,
+        is_dark_mode: updatedDarkMode,
       });
+      // يمكنك تحديث الـ Theme Context هنا إذا لزم الأمر
     } catch (error) {
       showAlert.error('خطأ', 'تعذر حفظ التفضيلات');
+      // Revert if failed
+      setPreferences({ is_dark_mode: !updatedDarkMode });
     } finally {
       setIsPrefSubmitting(false);
     }
@@ -151,7 +135,6 @@ const OwnerSettings = () => {
     setOpenSection((prev) => (prev === sectionName ? null : sectionName));
   };
 
-  // إعدادات الأنيميشن للقوائم المنسدلة
   const accordionVariants = {
     hidden: { height: 0, opacity: 0, overflow: 'hidden' },
     visible: {
@@ -177,7 +160,7 @@ const OwnerSettings = () => {
             <User className="w-6 h-6 text-emerald-500" /> إعدادات الإدارة
           </h1>
           <p className="text-sm font-bold text-slate-500 mt-1">
-            تحديث البيانات، حماية الحساب، وإدارة الإشعارات
+            تحديث البيانات، وحماية الحساب
           </p>
         </div>
         <button
@@ -397,7 +380,7 @@ const OwnerSettings = () => {
           </AnimatePresence>
         </div>
 
-        {/* القسم الثالث: التفضيلات والإشعارات */}
+        {/* القسم الثالث: المظهر (بعد إزالة الإشعارات) */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden">
           <button
             onClick={() => toggleSection('preferences')}
@@ -405,14 +388,14 @@ const OwnerSettings = () => {
           >
             <div className="flex items-center gap-4">
               <div className="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl">
-                <Bell className="w-5 h-5" />
+                <Monitor className="w-5 h-5" />
               </div>
               <div className="text-right">
                 <h2 className="text-base sm:text-lg font-black text-slate-800 dark:text-white">
-                  التفضيلات والإشعارات
+                  تفضيلات العرض
                 </h2>
                 <p className="text-xs font-bold text-slate-500 mt-0.5">
-                  تخصيص المظهر وتنبيهات النظام الذكية
+                  تخصيص الوضع الليلي للتطبيق
                 </p>
               </div>
             </div>
@@ -434,7 +417,7 @@ const OwnerSettings = () => {
               >
                 <div className="px-5 sm:px-6 pb-6 pt-2 border-t border-slate-100 dark:border-slate-800/50 mt-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Theme Toggle */}
+                    {/* Theme Toggle Only */}
                     <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
                       <div className="flex items-center gap-3">
                         {preferences.is_dark_mode ? (
@@ -447,61 +430,12 @@ const OwnerSettings = () => {
                         </span>
                       </div>
                       <button
-                        onClick={() => handleTogglePref('theme')}
-                        className={`w-11 h-6 rounded-full transition-colors relative flex items-center ${preferences.is_dark_mode ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+                        onClick={handleToggleTheme}
+                        disabled={isPrefSubmitting}
+                        className={`w-11 h-6 rounded-full transition-colors relative flex items-center ${preferences.is_dark_mode ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'} ${isPrefSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <span
                           className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${preferences.is_dark_mode ? 'translate-x-1 left-0' : '-translate-x-1 right-0'}`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* Notification Toggles */}
-                    {/* Notification Toggles */}
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                        تسجيل اليوميات ومبيعات البيض
-                      </span>
-                      <button
-                        onClick={() =>
-                          handleTogglePref('notif', 'daily_updates')
-                        }
-                        className={`w-11 h-6 rounded-full transition-colors relative flex items-center ${preferences.notifications.daily_updates !== false ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                      >
-                        <span
-                          className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${preferences.notifications.daily_updates !== false ? 'translate-x-1 left-0' : '-translate-x-1 right-0'}`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300 text-rose-600 dark:text-rose-400">
-                        تحذيرات النافق المرتفع
-                      </span>
-                      <button
-                        onClick={() =>
-                          handleTogglePref('notif', 'high_mortality')
-                        }
-                        className={`w-11 h-6 rounded-full transition-colors relative flex items-center ${preferences.notifications.high_mortality !== false ? 'bg-rose-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                      >
-                        <span
-                          className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${preferences.notifications.high_mortality !== false ? 'translate-x-1 left-0' : '-translate-x-1 right-0'}`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50">
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300 text-blue-600 dark:text-blue-400">
-                        حركة توريدات العلف
-                      </span>
-                      <button
-                        onClick={() =>
-                          handleTogglePref('notif', 'feed_delivery')
-                        }
-                        className={`w-11 h-6 rounded-full transition-colors relative flex items-center ${preferences.notifications.feed_delivery !== false ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-                      >
-                        <span
-                          className={`w-4 h-4 rounded-full bg-white absolute transition-transform ${preferences.notifications.feed_delivery !== false ? 'translate-x-1 left-0' : '-translate-x-1 right-0'}`}
                         />
                       </button>
                     </div>
