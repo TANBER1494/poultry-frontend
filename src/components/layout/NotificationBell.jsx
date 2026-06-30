@@ -5,6 +5,7 @@ import {
   Bell,
   CheckCircle2,
   FileText,
+  Clock,
   AlertTriangle,
   ShieldAlert,
   Info,
@@ -13,12 +14,11 @@ import {
   Eraser,
   Truck,
   ShoppingCart,
-  Activity,
+  Activity, // الأيقونات الجديدة
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import notificationService from '../../services/notificationService';
 import { showAlert } from '../../utils/alert';
-//  استدعاء دوال الفايربيز
 import { requestForToken, onMessageListener } from '../../firebase';
 
 const NotificationBell = () => {
@@ -39,7 +39,6 @@ const NotificationBell = () => {
         setNotifications(data);
         setUnreadCount(data.filter((n) => !n.is_read).length);
 
-        // طلب صلاحية الإشعارات من المتصفح واستخراج التوكن
         const token = await requestForToken();
         if (token) {
           await notificationService.saveFcmToken(token);
@@ -50,11 +49,9 @@ const NotificationBell = () => {
     };
     fetchHistoryAndRegisterToken();
 
-    // الاستماع لإشعارات الـ Push في الخلفية (FCM)
     onMessageListener()
       .then((payload) => {
         console.log('FCM Payload Received:', payload);
-        // يمكنك عرض Alert هنا إذا أردت
       })
       .catch((err) => console.log('FCM Error: ', err));
   }, []);
@@ -85,7 +82,6 @@ const NotificationBell = () => {
       }
     };
 
-    //  التعديل 3: إصلاح اسم الحدث ليتطابق مع الباك إند
     socket.on('new_notification', handleNewNotification);
 
     return () => socket.off('new_notification', handleNewNotification);
@@ -101,7 +97,6 @@ const NotificationBell = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ... (باقي دوال الحذف والتحديد كمقروء كما هي في الكود الخاص بك دون تغيير)
   const handleNotificationClick = async (notif) => {
     setIsOpen(false);
     if (!notif.is_read) {
@@ -155,6 +150,7 @@ const NotificationBell = () => {
     }
   };
 
+  // نظام الألوان الذكي المحدث
   const getNotificationUI = (type) => {
     switch (type) {
       case 'CYCLE_STARTED':
@@ -217,7 +213,6 @@ const NotificationBell = () => {
   };
 
   return (
-    // ... (باقي كود الـ UI الخاص بك كما هو بالظبط بدون أي تعديل لأنه ممتاز)
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
@@ -252,7 +247,108 @@ const NotificationBell = () => {
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="fixed top-[80px] left-4 right-4 sm:absolute sm:top-full sm:mt-4 sm:left-0 sm:right-auto sm:w-[420px] bg-white dark:bg-slate-800 rounded-[28px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-slate-100 dark:border-slate-700 overflow-hidden z-[100] flex flex-col max-h-[80vh] sm:max-h-none"
           >
-            {/* ... محتوى الـ UI ... */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50 flex items-center justify-between shrink-0 transition-colors">
+              <h3 className="font-black text-slate-800 dark:text-white text-base sm:text-lg flex items-center gap-2">
+                التنبيهات
+                <span className="text-[11px] sm:text-xs bg-indigo-600 dark:bg-indigo-500 text-white px-2.5 py-0.5 rounded-lg shadow-sm">
+                  {notifications.length}
+                </span>
+              </h3>
+
+              <div className="flex items-center gap-2">
+                {notifications.some((n) => n.is_read) && (
+                  <button
+                    onClick={handleClearRead}
+                    title="مسح الإشعارات المقروءة"
+                    className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+                  >
+                    <Eraser className="w-4 h-4" />
+                  </button>
+                )}
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="text-[11px] sm:text-xs font-black text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 px-2 py-1.5 rounded-lg transition-colors"
+                  >
+                    <CheckCheck className="w-4 h-4" /> مقروء
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div
+              className="flex-1 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-800 transition-colors"
+              style={{ maxHeight: 'calc(100vh - 200px)' }}
+            >
+              {notifications.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center justify-center">
+                  <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900/50 rounded-full flex items-center justify-center mb-4 transition-colors">
+                    <Bell className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+                  </div>
+                  <p className="font-black text-slate-500 dark:text-slate-400 text-sm sm:text-base">
+                    صندوق الإشعارات فارغ
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {notifications.map((notif) => {
+                    const ui = getNotificationUI(notif.type);
+                    return (
+                      <div
+                        key={notif._id}
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`p-4 sm:p-5 border-b border-slate-50 dark:border-slate-700/50 flex gap-4 cursor-pointer transition-all relative group ${!notif.is_read ? 'bg-indigo-50/40 dark:bg-indigo-500/10 hover:bg-indigo-50/80 dark:hover:bg-indigo-500/20' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}
+                      >
+                        {!notif.is_read && (
+                          <div className="absolute left-4 top-1/2 -translate-y-1/2 w-2 h-2 bg-indigo-600 dark:bg-indigo-400 rounded-full shadow-[0_0_8px_rgba(79,70,229,0.6)] dark:shadow-[0_0_8px_rgba(129,140,248,0.4)]"></div>
+                        )}
+
+                        <div
+                          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 border ${ui.bg} group-hover:scale-105 transition-transform`}
+                        >
+                          {ui.icon}
+                        </div>
+
+                        <div className="flex-1 pr-1">
+                          <div className="flex justify-between items-start mb-1">
+                            <h4
+                              className={`text-sm sm:text-base tracking-tight ${!notif.is_read ? 'font-black text-slate-900 dark:text-white' : 'font-bold text-slate-700 dark:text-slate-300'}`}
+                            >
+                              {notif.title}
+                            </h4>
+                            <button
+                              onClick={(e) => handleDelete(e, notif._id)}
+                              className="p-1.5 text-slate-300 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <p
+                            className={`text-[11px] sm:text-[13px] leading-relaxed mb-2 sm:mb-3 pr-2 sm:pr-0 ${!notif.is_read ? 'text-slate-600 dark:text-slate-300 font-bold' : 'text-slate-500 dark:text-slate-400 font-semibold'}`}
+                          >
+                            {notif.message}
+                          </p>
+                          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            {new Date(notif.createdAt).toLocaleTimeString(
+                              'ar-EG',
+                              { hour: '2-digit', minute: '2-digit' }
+                            )}
+                            <span className="mx-1">•</span>
+                            {new Date(notif.createdAt).toLocaleDateString(
+                              'ar-EG',
+                              { month: 'short', day: 'numeric' }
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="p-3 sm:p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-center shrink-0 transition-colors">
               <span className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-slate-500 flex items-center justify-center gap-1.5 uppercase tracking-wider">
                 <span className="relative flex h-2 w-2">
