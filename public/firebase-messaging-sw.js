@@ -14,18 +14,34 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات
+//  1. استلام البيانات في الخلفية ورسم الإشعار يدوياً وبقوة
+// ==============================================================
+messaging.onBackgroundMessage(function(payload) {
+  const data = payload.data || {};
+  
+  const notificationTitle = data.title || 'مزرعتي';
+  const notificationOptions = {
+    body: data.body || 'يوجد تحديث جديد',
+    icon: data.icon || '/logo.png', // صورة البيض أو التحذير التي حددناها
+    badge: '/badge.png', // يجب أن تكون أيقونة شفافة بيضاء لكي يقبلها الأندرويد في الشريط العلوي
+    dir: 'rtl',
+    data: {
+      url: data.click_action || '/'
+    }
+  };
+
+  //  سطر الـ return هذا هو ما يمنع رسالة Chrome المزعجة من الظهور!
+  return self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// ==============================================================
+//  2. تفعيل التوجيه عند الضغط على الإشعار
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // جلب الرابط من البيانات (أو توجيهه للرئيسية كاحتياطي)
-  let targetUrl = '/';
-  if (event.notification.data && event.notification.data.click_action) {
-    targetUrl = event.notification.data.click_action;
-  }
+  const targetUrl = event.notification.data?.url || '/';
 
-  // فتح التطبيق أو إيقاظه إذا كان في الخلفية
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
         for (let i = 0; i < windowClients.length; i++) {
