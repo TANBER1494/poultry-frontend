@@ -34,22 +34,33 @@ export const AuthProvider = ({ children }) => {
     let newSocket;
     
     if (user && token) {
+      // 1. إنشاء الاتصال (إضافة polling كاحتياطي يمنع فشل الاتصال في بعض السيرفرات)
       newSocket = io(SOCKET_URL, {
         auth: { token },
-        //  الحل السحري: حذفنا سطر transports لكي نمنح المتصفح حرية اختيار الاتصال المناسب
+        transports: ['websocket', 'polling'], 
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       });
 
+      // 2.  التعديل الجوهري: تعيين الحالة فوراً وليس داخل حدث الاتصال
+      setSocket(newSocket);
+
       newSocket.on('connect', () => {
-        console.log('✅ Socket connected successfully');
-        // تم حذف أكواد joinRoom اليدوية لأن الباك إند هو المسؤول عن حماية وإدارة الغرف
-        setSocket(newSocket);
+        console.log('Socket connected successfully');
+        // ملاحظة: الباك إند لديك يقوم بإدخال المستخدمين في الغرف تلقائياً 
+        // بناءً على التوكن، فهذه الانبعاثات (emit) احتياطية فقط
+        if (user.role === 'SUPER_ADMIN') {
+          newSocket.emit('joinRoom', 'SUPER_ADMIN_ROOM');
+        } else if (user.role === 'OWNER') {
+          newSocket.emit('joinRoom', user.organization_id);
+        } else if (user.role === 'SUPERVISOR') {
+          newSocket.emit('joinRoom', user.id || user._id); 
+        }
       });
 
       newSocket.on('connect_error', (error) => {
-        console.error('❌ Socket connection failed:', error.message);
+        console.error('Socket connection failed:', error.message);
       });
     }
 

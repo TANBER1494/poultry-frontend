@@ -49,11 +49,24 @@ const NotificationBell = () => {
     };
     fetchHistoryAndRegisterToken();
 
-    onMessageListener()
-      .then((payload) => {
-        console.log('FCM Payload Received:', payload);
-      })
-      .catch((err) => console.log('FCM Error: ', err));
+    onMessageListener((payload) => {
+      console.log('FCM Background Payload:', payload);
+
+      // تحويل إشعار فايربيز لهيكل يتناسب مع القائمة المنسدلة لديك
+      const newFCMNotif = {
+        _id: Date.now().toString(), // معرف وهمي مؤقت
+        title: payload.notification?.title || 'إشعار جديد',
+        message: payload.notification?.body || '',
+        type: 'SYSTEM',
+        createdAt: new Date().toISOString(),
+        is_read: false,
+        link: payload.data?.link || '/',
+      };
+
+      setNotifications((prev) => [newFCMNotif, ...prev]);
+      setUnreadCount((prev) => prev + 1);
+      showAlert.success(newFCMNotif.title, newFCMNotif.message);
+    });
   }, []);
 
   // 2. الاستماع اللحظي للـ Socket
