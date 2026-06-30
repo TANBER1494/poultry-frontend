@@ -13,36 +13,20 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// ==============================================================
-//  1. استلام الإشعار في الخلفية ورسمه يدوياً (لمنع الرسالة الافتراضية)
-// ==============================================================
-messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  
-  const notificationTitle = payload.notification?.title || 'إشعار جديد';
-  const notificationOptions = {
-    body: payload.notification?.body || '',
-    icon: '/pwa-192x192.png', // تأكد أن اللوجو موجود بهذا الاسم
-    badge: '/pwa-192x192.png',
-    dir: 'rtl',
-    data: {
-      click_action: payload.data?.click_action || '/' // استلام الرابط من الباك إند
-    }
-  };
-
-  // إجبار المتصفح على رسم إشعارنا نحن وليس الإشعار الافتراضي
-  return self.registration.showNotification(notificationTitle, notificationOptions);
-});
+//  تم حذف onBackgroundMessage بالكامل ليعمل السلوك الافتراضي السليم (مثل دكاني)
 
 // ==============================================================
-//  2. تفعيل الضغط على الإشعارات والتوجيه للرابط الصحيح
+// تفعيل الضغط على الإشعارات كاحتياطي إضافي
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
+  // جلب الرابط من الإشعار الافتراضي
   let targetUrl = '/';
-  if (event.notification.data && event.notification.data.click_action) {
-    targetUrl = event.notification.data.click_action;
+  if (event.notification?.data?.FCM_MSG?.notification?.click_action) {
+     targetUrl = event.notification.data.FCM_MSG.notification.click_action;
+  } else if (event.notification?.click_action) {
+     targetUrl = event.notification.click_action;
   }
 
   event.waitUntil(
