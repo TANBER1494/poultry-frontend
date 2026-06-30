@@ -36,26 +36,20 @@ export const AuthProvider = ({ children }) => {
     if (user && token) {
       newSocket = io(SOCKET_URL, {
         auth: { token },
-        transports: ['websocket'],
+        //  الحل السحري: حذفنا سطر transports لكي نمنح المتصفح حرية اختيار الاتصال المناسب
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       });
 
       newSocket.on('connect', () => {
-        console.log('Socket connected successfully');
-        if (user.role === 'SUPER_ADMIN') {
-          newSocket.emit('joinRoom', 'SUPER_ADMIN_ROOM');
-        } else if (user.role === 'OWNER') {
-          newSocket.emit('joinRoom', user.organization_id);
-        } else if (user.role === 'SUPERVISOR') {
-          newSocket.emit('joinRoom', user.id || user._id); 
-        }
+        console.log('✅ Socket connected successfully');
+        // تم حذف أكواد joinRoom اليدوية لأن الباك إند هو المسؤول عن حماية وإدارة الغرف
         setSocket(newSocket);
       });
 
       newSocket.on('connect_error', (error) => {
-        console.error('Socket connection failed:', error.message);
+        console.error('❌ Socket connection failed:', error.message);
       });
     }
 
