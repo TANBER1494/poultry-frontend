@@ -14,43 +14,32 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-//  1. استلام البيانات في الخلفية ورسم الإشعار يدوياً وبقوة
-// ==============================================================
-messaging.onBackgroundMessage(function(payload) {
-  const data = payload.data || {};
-  
-  const notificationTitle = data.title || 'مزرعتي';
-  const notificationOptions = {
-    body: data.body || 'يوجد تحديث جديد',
-    icon: data.icon || '/logo.png', // صورة البيض أو التحذير التي حددناها
-    badge: '/badge.png', // يجب أن تكون أيقونة شفافة بيضاء لكي يقبلها الأندرويد في الشريط العلوي
-    dir: 'rtl',
-    data: {
-      url: data.click_action || '/'
-    }
-  };
-
-  //  سطر الـ return هذا هو ما يمنع رسالة Chrome المزعجة من الظهور!
-  return self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
-// ==============================================================
-//  2. تفعيل التوجيه عند الضغط على الإشعار
+// تفعيل الضغط على الإشعارات والتوجيه الذكي (بدون الرسالة المزعجة)
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  const targetUrl = event.notification.data?.url || '/';
+  let targetUrl = '/';
+  
+  // استخراج الرابط من الإشعار سواء كان مغلفاً بـ FCM_MSG أو مباشراً
+  if (event.notification.data && event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.data && event.notification.data.FCM_MSG.data.url) {
+    targetUrl = event.notification.data.FCM_MSG.data.url;
+  } else if (event.notification.data && event.notification.data.url) {
+    targetUrl = event.notification.data.url;
+  }
 
+  // منطق دكاني المستقر لفتح أو تنشيط النافذة
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
+          // إذا كان التطبيق مفتوحاً في الخلفية، اجلبه للمقدمة ووجهه للرابط
           if (client.url.includes(self.location.origin) && 'focus' in client) {
             client.navigate(targetUrl);
             return client.focus();
           }
         }
+        // إذا كان التطبيق مغلقاً تماماً، افتح نافذة جديدة
         if (clients.openWindow) {
           return clients.openWindow(targetUrl);
         }
