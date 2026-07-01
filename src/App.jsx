@@ -3,7 +3,6 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext'; 
 import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes/AppRoutes';
-import SplashScreen from '../src/components/layout/SplashScreen';
 
 function App() {
   return (
@@ -18,9 +17,7 @@ function App() {
             }} 
           />
           {/* تغليف المسارات بالـ SplashScreen لتعمل بسلاسة */}
-          <SplashScreen>
             <AppRoutes />
-          </SplashScreen>
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>
