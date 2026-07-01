@@ -14,29 +14,42 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات
+//  تفعيل الضغط على الإشعارات بشكل دقيق للأندرويد
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // جلب الرابط من البيانات (أو توجيهه للرئيسية كاحتياطي)
   let targetUrl = '/';
-  if (event.notification.data && event.notification.data.click_action) {
-    targetUrl = event.notification.data.click_action;
+  
+  // 1. استخراج الرابط بأمان من الـ Payload الخاص بـ Firebase
+  const data = event.notification.data;
+  if (data) {
+    if (data.click_action) {
+      targetUrl = data.click_action;
+    } else if (data.url) {
+      targetUrl = data.url;
+    } else if (data.FCM_MSG && data.FCM_MSG.data) {
+      targetUrl = data.FCM_MSG.data.click_action || data.FCM_MSG.data.url || '/';
+    }
   }
 
-  // فتح التطبيق أو إيقاظه إذا كان في الخلفية
+  // 2. دمج المسار (مثال: /owner/sales) مع النطاق الأساسي لإنشاء مسار كامل (Absolute URL)
+  // هذا هو الحل الذي سيجبر نظام الأندرويد على فتح التطبيق!
+  const fullUrl = new URL(targetUrl, self.location.origin).href;
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
+          // إذا كان التطبيق مفتوحاً في الخلفية، اجعله في الواجهة وانتقل للرابط
           if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.navigate(targetUrl);
+            client.navigate(fullUrl);
             return client.focus();
           }
         }
+        // إذا كان التطبيق مغلقاً تماماً، افتح نافذة جديدة بالرابط الكامل
         if (clients.openWindow) {
-          return clients.openWindow(targetUrl);
+          return clients.openWindow(fullUrl);
         }
       })
   );
