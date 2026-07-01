@@ -33,21 +33,17 @@ self.addEventListener('notificationclick', function (event) {
     }
   }
 
-  // 2. دمج المسار (مثال: /owner/sales) مع النطاق الأساسي لإنشاء مسار كامل (Absolute URL)
-  // هذا هو الحل الذي سيجبر نظام الأندرويد على فتح التطبيق!
   const fullUrl = new URL(targetUrl, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
-          // إذا كان التطبيق مفتوحاً في الخلفية، اجعله في الواجهة وانتقل للرابط
           if (client.url.includes(self.location.origin) && 'focus' in client) {
             client.navigate(fullUrl);
             return client.focus();
           }
         }
-        // إذا كان التطبيق مغلقاً تماماً، افتح نافذة جديدة بالرابط الكامل
         if (clients.openWindow) {
           return clients.openWindow(fullUrl);
         }
