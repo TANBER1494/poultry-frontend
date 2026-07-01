@@ -2,7 +2,6 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging-compat.js');
 
-// استخدام مفاتيح المشروع الحالي
 firebase.initializeApp({
   apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
   authDomain: "poultry-farm-erp.firebaseapp.com",
@@ -15,12 +14,12 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات (نسخة دكاني المستقرة)
+// تفعيل الضغط على الإشعارات (نسخة دكاني الأصلية)
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // جلب الرابط من البيانات 
+  // جلب الرابط من البيانات (أو توجيهه للرئيسية كاحتياطي)
   let targetUrl = '/';
   if (event.notification.data && event.notification.data.click_action) {
     targetUrl = event.notification.data.click_action;
