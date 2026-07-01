@@ -14,11 +14,11 @@ import {
   Eraser,
   Truck,
   ShoppingCart,
-  Activity, 
+  Activity,
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import notificationService from '../../services/notificationService';
-import { showAlert } from '../../utils/alert';
+import toast from 'react-hot-toast';
 import { requestForToken, onMessageListener } from '../../firebase';
 
 const NotificationBell = () => {
@@ -61,19 +61,32 @@ const NotificationBell = () => {
 
         // تحويل إشعار فايربيز لهيكل يتناسب مع القائمة المنسدلة
         const newFCMNotif = {
-          _id: Date.now().toString(), 
+          _id: Date.now().toString(),
           title: payload.notification?.title || 'إشعار جديد',
           message: payload.notification?.body || '',
           type: 'SYSTEM',
           createdAt: new Date().toISOString(),
           is_read: false,
-          link: payload.data?.url || payload.data?.link || payload.data?.click_action || '/',
+          link:
+            payload.data?.url ||
+            payload.data?.link ||
+            payload.data?.click_action ||
+            '/',
         };
 
         setNotifications((prev) => [newFCMNotif, ...prev]);
         setUnreadCount((prev) => prev + 1);
-        showAlert.success(newFCMNotif.title, newFCMNotif.message);
-
+        toast.success(
+          <div className="flex flex-col gap-1 text-right w-full">
+            <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              {newFCMNotif.title}
+            </strong>
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+              {newFCMNotif.message}
+            </span>
+          </div>,
+          { duration: 4000 }
+        );
         // إعادة الاستدعاء لالتقاط الإشعار التالي
         listenForMessages();
       } catch (err) {
@@ -99,8 +112,17 @@ const NotificationBell = () => {
         audio.play().catch(() => console.log('المتصفح منع الصوت'));
       } catch (err) {}
 
-      showAlert.success(newNotif.title, newNotif.message);
-
+      toast.success(
+        <div className="flex flex-col gap-1 text-right w-full">
+          <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
+            {newNotif.title}
+          </strong>
+          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {newNotif.message}
+          </span>
+        </div>,
+        { duration: 4000 }
+      );
       if ('Notification' in window && Notification.permission === 'granted') {
         // 🚀 استخدام الرابط الكامل للصورة هنا لمنع كراش الأندرويد
         new Notification(newNotif.title, {
@@ -183,42 +205,58 @@ const NotificationBell = () => {
     switch (type) {
       case 'CYCLE_STARTED':
         return {
-          icon: <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500 dark:text-emerald-400" />,
+          icon: (
+            <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500 dark:text-emerald-400" />
+          ),
           bg: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20',
         };
       case 'DAILY_LOG':
         return {
-          icon: <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-500 dark:text-indigo-400" />,
+          icon: (
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-500 dark:text-indigo-400" />
+          ),
           bg: 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-100 dark:border-indigo-500/20',
         };
       case 'EGG_SALE':
         return {
-          icon: <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500 dark:text-amber-400" />,
+          icon: (
+            <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500 dark:text-amber-400" />
+          ),
           bg: 'bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20',
         };
       case 'FEED_DELIVERY':
         return {
-          icon: <Truck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 dark:text-blue-400" />,
+          icon: (
+            <Truck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 dark:text-blue-400" />
+          ),
           bg: 'bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20',
         };
       case 'FEED_CONFIRMED':
         return {
-          icon: <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500 dark:text-emerald-400" />,
+          icon: (
+            <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500 dark:text-emerald-400" />
+          ),
           bg: 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20',
         };
       case 'HIGH_MORTALITY':
         return {
-          icon: <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500 dark:text-rose-400" />,
+          icon: (
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500 dark:text-rose-400" />
+          ),
           bg: 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20',
         };
       case 'LARGE_EXPENSE':
         return {
-          icon: <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500 dark:text-rose-400" />,
+          icon: (
+            <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500 dark:text-rose-400" />
+          ),
           bg: 'bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20',
         };
       default:
         return {
-          icon: <Info className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />,
+          icon: (
+            <Info className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500 dark:text-slate-400" />
+          ),
           bg: 'bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-700',
         };
     }
