@@ -14,7 +14,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات (نسخة دكاني الأصلية)
+// تفعيل الضغط على الإشعارات (نسخة دكاني المستقرة)
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
