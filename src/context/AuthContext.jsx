@@ -30,33 +30,34 @@ export const AuthProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const loading = false; 
 
-  useEffect(() => {
+useEffect(() => {
     let newSocket;
     
     if (user && token) {
-      // 1. إنشاء الاتصال (إضافة polling كاحتياطي يمنع فشل الاتصال في بعض السيرفرات)
+      //  إزالة إرسال التوكن في الـ auth لأننا بسطنا السوكت في الباك إند كـ دكاني
       newSocket = io(SOCKET_URL, {
-        auth: { token },
         transports: ['websocket', 'polling'], 
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
       });
 
-      // 2.  التعديل الجوهري: تعيين الحالة فوراً وليس داخل حدث الاتصال
       setSocket(newSocket);
 
       newSocket.on('connect', () => {
         console.log('Socket connected successfully');
-        // ملاحظة: الباك إند لديك يقوم بإدخال المستخدمين في الغرف تلقائياً 
-        // بناءً على التوكن، فهذه الانبعاثات (emit) احتياطية فقط
+        
+        // 🚀 توجيه المستخدم للغرفة الصحيحة بناءً على دوره (كما في دكاني تماماً)
+        let room;
         if (user.role === 'SUPER_ADMIN') {
-          newSocket.emit('joinRoom', 'SUPER_ADMIN_ROOM');
+          room = 'SUPER_ADMIN_ROOM';
         } else if (user.role === 'OWNER') {
-          newSocket.emit('joinRoom', user.organization_id);
-        } else if (user.role === 'SUPERVISOR') {
-          newSocket.emit('joinRoom', user.id || user._id); 
+          room = user.organization_id;
+        } else {
+          room = user._id || user.id; 
         }
+        
+        newSocket.emit('joinRoom', room);
       });
 
       newSocket.on('connect_error', (error) => {

@@ -1,58 +1,52 @@
-import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { initializeApp } from "firebase/app";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-//  التعديل 1: استخدام مفاتيح مشروع مزرعة الدواجن
+// المفاتيح الجديدة النظيفة لمشروع مزرعتي
 const firebaseConfig = {
-  apiKey: 'AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo',
-  authDomain: 'poultry-farm-erp.firebaseapp.com',
-  projectId: 'poultry-farm-erp',
-  storageBucket: 'poultry-farm-erp.firebasestorage.app',
-  messagingSenderId: '541973591769',
-  appId: '1:541973591769:web:e273d5a1fb717c5ac630c8',
+  apiKey: "AIzaSyC3vT0eIzIPQjUyORDcexBCKBsHF3PUsN0",
+  authDomain: "poultry-1f143.firebaseapp.com",
+  projectId: "poultry-1f143",
+  storageBucket: "poultry-1f143.firebasestorage.app",
+  messagingSenderId: "16519813025",
+  appId: "1:16519813025:web:1886f431e4f8455aea9de0",
+  measurementId: "G-1BJ7PTJD0X"
 };
 
 const app = initializeApp(firebaseConfig);
 
-export const messaging =
-  typeof window !== 'undefined' && 'Notification' in window
-    ? getMessaging(app)
-    : null;
+// تهيئة الإشعارات (متوافقة مع المتصفحات المدعومة فقط)
+export const messaging = typeof window !== 'undefined' && 'Notification' in window ? getMessaging(app) : null;
 
+// دالة استخراج إحداثيات الموبايل (FCM Token)
 export const requestForToken = async () => {
   if (!messaging) return null;
-
+  
   try {
-    //  طلب الإذن أولاً من المستخدم
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      console.warn('تم رفض صلاحية الإشعارات من المستخدم');
+    //  إجبار المتصفح على تسجيل الجندي الخفي (Service Worker) بوضوح
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    
+    const currentToken = await getToken(messaging, { 
+      //  انسخ مفتاح الـ VAPID من فايربيز وضعه هنا بدلاً من هذه الكلمة
+      vapidKey: 'BM5XaJLW77_QEV0oalJtO7xE44Y22LVj0QGnraW3CZ1htv23CQJY7qYj4yMgrO46fHpYngRyQhIN6sBi5d3NN3Y', 
+      serviceWorkerRegistration: registration 
+    });
+    
+    if (currentToken) {
+      return currentToken;
+    } else {
       return null;
     }
-
-    let registration = await navigator.serviceWorker.getRegistration();
-
-    if (!registration) {
-      registration = await navigator.serviceWorker.register(
-        '/firebase-messaging-sw.js'
-      );
-    }
-
-    const currentToken = await getToken(messaging, {
-      vapidKey:
-        'BIXHbmvurh4OEtT58RB1eLlv7pk-nbnu56JRVMEy8fBs3Ct9dC0GASSAgzy0CSMsSzcez-r9b8ppxNa9HeyT8CY',
-      serviceWorkerRegistration: registration,
-    });
-
-    return currentToken || null;
   } catch (err) {
     console.error('❌ خطأ في استخراج التوكن:', err);
     return null;
   }
 };
 
-export const onMessageListener = (callback) => {
-  if (!messaging) return;
-  onMessage(messaging, (payload) => {
-    callback(payload);
+// دالة استلام الإشعارات والتطبيق مفتوح أمام المستخدم
+export const onMessageListener = () =>
+  new Promise((resolve) => {
+    if (!messaging) return;
+    onMessage(messaging, (payload) => {
+      resolve(payload);
+    });
   });
-};

@@ -3,18 +3,18 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.8.1/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: "AIzaSyDMHNFPu7Npcdz7KS12nOWdXHFq4_IRjZo",
-  authDomain: "poultry-farm-erp.firebaseapp.com",
-  projectId: "poultry-farm-erp",
-  storageBucket: "poultry-farm-erp.firebasestorage.app",
-  messagingSenderId: "541973591769",
-  appId: "1:541973591769:web:e273d5a1fb717c5ac630c8"
+  apiKey: "AIzaSyC3vT0eIzIPQjUyORDcexBCKBsHF3PUsN0",
+  authDomain: "poultry-1f143.firebaseapp.com",
+  projectId: "poultry-1f143",
+  storageBucket: "poultry-1f143.firebasestorage.app",
+  messagingSenderId: "16519813025",
+  appId: "1:16519813025:web:1886f431e4f8455aea9de0"
 });
 
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات (نسخة دكاني المستقرة)
+// تفعيل الضغط على الإشعارات
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
