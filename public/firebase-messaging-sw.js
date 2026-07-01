@@ -14,32 +14,27 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // ==============================================================
-// تفعيل الضغط على الإشعارات والتوجيه الذكي (بدون الرسالة المزعجة)
+// تفعيل الضغط على الإشعارات (نسخة دكاني الأصلية)
 // ==============================================================
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
+  // جلب الرابط من البيانات (أو توجيهه للرئيسية كاحتياطي)
   let targetUrl = '/';
-  
-  // استخراج الرابط من الإشعار سواء كان مغلفاً بـ FCM_MSG أو مباشراً
-  if (event.notification.data && event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.data && event.notification.data.FCM_MSG.data.url) {
-    targetUrl = event.notification.data.FCM_MSG.data.url;
-  } else if (event.notification.data && event.notification.data.url) {
-    targetUrl = event.notification.data.url;
+  if (event.notification.data && event.notification.data.click_action) {
+    targetUrl = event.notification.data.click_action;
   }
 
-  // منطق دكاني المستقر لفتح أو تنشيط النافذة
+  // فتح التطبيق أو إيقاظه إذا كان في الخلفية
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
         for (let i = 0; i < windowClients.length; i++) {
           const client = windowClients[i];
-          // إذا كان التطبيق مفتوحاً في الخلفية، اجلبه للمقدمة ووجهه للرابط
           if (client.url.includes(self.location.origin) && 'focus' in client) {
             client.navigate(targetUrl);
             return client.focus();
           }
         }
-        // إذا كان التطبيق مغلقاً تماماً، افتح نافذة جديدة
         if (clients.openWindow) {
           return clients.openWindow(targetUrl);
         }
