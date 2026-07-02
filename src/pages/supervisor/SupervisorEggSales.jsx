@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShoppingCart, Package, Tractor, 
-  Loader2, CheckCircle2, AlertTriangle, Users, Printer, Receipt, User
+  Loader2, CheckCircle2, AlertTriangle, Users, Printer, Receipt, User, ArrowDownCircle
 } from 'lucide-react';
 import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
@@ -18,7 +18,6 @@ const SupervisorEggSales = () => {
   const [merchants, setMerchants] = useState([]);
   const [eggStock, setEggStock] = useState(0); 
   
-  // 🛡️ أرشيف الفواتير المصدرة في الجلسة الحالية
   const [recentInvoices, setRecentInvoices] = useState([]);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -27,11 +26,14 @@ const SupervisorEggSales = () => {
   const [formData, setFormData] = useState({
     cycle_id: '',
     merchant_id: '',
-    rep_name: '', // 🛡️ إضافة حقل المندوب
+    rep_name: '',
     quantity: '',
     unit_price: '',
     paid_amount: ''
   });
+
+  //  حالة السحب المقدم (السلفة من العنابر)
+  const [advancedPulls, setAdvancedPulls] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -86,20 +88,31 @@ const SupervisorEggSales = () => {
   const handleFarmChange = async (e) => {
     const newFarmId = e.target.value;
     setSelectedFarmId(newFarmId);
-    setFormData(p => ({ ...p, cycle_id: '', merchant_id: '', rep_name: '' }));
+    setFormData(p => ({ ...p, cycle_id: '', merchant_id: '', rep_name: '', quantity: '' }));
+    setAdvancedPulls({});
     setIsLoading(true);
     await fetchDependencies(newFarmId);
   };
 
-  // 🛡️ استخراج المناديب للشركة المختارة
   const selectedMerchantData = merchants.find(m => m._id === formData.merchant_id);
   const availableReps = selectedMerchantData?.representatives || [];
+
+  //  حسابات العجز والسحب المتقدم
+  const requestedQty = Number(formData.quantity) || 0;
+  const deficit = Math.max(0, requestedQty - eggStock);
+  const totalPulled = Object.values(advancedPulls).reduce((sum, val) => sum + (Number(val) || 0), 0);
+  const isDeficitCovered = deficit === 0 || totalPulled === deficit;
+
+  const handlePullChange = (cycleId, value) => {
+    setAdvancedPulls(prev => ({ ...prev, [cycleId]: value }));
+  };
 
   const handleSaleSubmit = async (e) => {
     e.preventDefault();
     
-    if (eggStock < Number(formData.quantity)) {
-      return showAlert.error('رصيد غير كافٍ', `الكمية المطلوبة للبيع تتجاوز الرصيد المتاح (${eggStock} طبق).`);
+    // حماية إضافية قبل الإرسال
+    if (deficit > 0 && totalPulled !== deficit) {
+      return showAlert.error('عجز في الأرصدة', `يجب توزيع العجز (${deficit} طبق) على العنابر بالضبط.`);
     }
 
     const totalInvoice = Number(formData.quantity) * Number(formData.unit_price);
@@ -111,6 +124,11 @@ const SupervisorEggSales = () => {
       setIsSubmitting(true);
       const now = new Date();
       
+      // تحضير مصفوفة السحوبات بصيغتها النهائية للباك إند
+      const pullsArray = Object.entries(advancedPulls)
+        .filter(([_, q]) => Number(q) > 0)
+        .map(([c_id, q]) => ({ cycle_id: c_id, quantity: Number(q) }));
+      
       const payload = {
         local_id: `SALE_${Date.now()}`,
         merchant_id: formData.merchant_id,
@@ -118,16 +136,16 @@ const SupervisorEggSales = () => {
         quantity: formData.quantity,
         unit_price: formData.unit_price,
         paid_amount: formData.paid_amount || 0,
-        transaction_date: now.toISOString(), // 🛡️ تاريخ تلقائي دقيق
-        notes: formData.rep_name ? `تم التسليم للمندوب/السائق: ${formData.rep_name}` : '' // 🛡️ توثيق المندوب
+        transaction_date: now.toISOString(), 
+        notes: formData.rep_name ? `تم التسليم للمندوب/السائق: ${formData.rep_name}` : '',
+        advanced_pulls: pullsArray // 🚀 إرسال السحوبات المتقدمة
       };
 
       await cycleService.recordCycleSale(formData.cycle_id, payload);
-      showAlert.success('تمت العملية', 'تم تسجيل الفاتورة وخصم البيض من المخزن آلياً');
+      showAlert.success('تمت العملية', 'تم تسجيل الفاتورة وتحديث المخازن وسلف العنابر آلياً');
       
-      // 🛡️ إضافة الفاتورة لأرشيف الجلسة للطباعة
       const newInvoiceRecord = {
-        id: Math.floor(Math.random() * 1000000), // ID وهمي للطباعة السريعة
+        id: Math.floor(Math.random() * 1000000),
         date: now,
         company: selectedMerchantData?.company_name,
         rep: formData.rep_name || 'غير محدد',
@@ -137,8 +155,8 @@ const SupervisorEggSales = () => {
       };
       setRecentInvoices(prev => [newInvoiceRecord, ...prev]);
 
-      // تصفير الفورم وتحديث الأرصدة
       setFormData(p => ({ ...p, quantity: '', unit_price: '', paid_amount: '' }));
+      setAdvancedPulls({});
       await fetchDependencies(selectedFarmId);
     } catch (error) {
       showAlert.error('فشل عملية البيع', error.response?.data?.message || 'تأكد من صحة البيانات والأرصدة');
@@ -147,8 +165,8 @@ const SupervisorEggSales = () => {
     }
   };
 
-  // 🖨️ دالة طباعة الفاتورة (Receipt Printer Style)
   const handlePrint = (invoice) => {
+    // كود الطباعة كما هو
     const printContent = `
       <html dir="rtl">
         <head>
@@ -182,9 +200,7 @@ const SupervisorEggSales = () => {
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     printWindow.document.write(printContent);
     printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+    setTimeout(() => { printWindow.print(); }, 500);
   };
 
   const totalValue = (Number(formData.quantity || 0) * Number(formData.unit_price || 0));
@@ -192,13 +208,12 @@ const SupervisorEggSales = () => {
 
   return (
     <div className="space-y-6 pb-20 max-w-5xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
             <ShoppingCart className="w-6 h-6 text-emerald-500" /> مبيعات البيض
           </h1>
-          <p className="text-sm font-bold text-slate-500 mt-1">إصدار فواتير البيع وطباعتها وتحديث المخزن آلياً</p>
+          <p className="text-sm font-bold text-slate-500 mt-1">إصدار فواتير البيع وتوجيه السحوبات المقدمة</p>
         </div>
         <div className="relative">
           <Tractor className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -219,15 +234,13 @@ const SupervisorEggSales = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* الجانب الأيمن: نموذج البيع (مأخر في الموبايل، متقدم في الديسكتوب) */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="order-2 lg:order-1 lg:col-span-2 space-y-6">
-            
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
               <form onSubmit={handleSaleSubmit} className="space-y-5">
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">العنبر / الدورة *</label>
+                    <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">فاتورة تابعة لعنبر (للتوثيق) *</label>
                     <select value={formData.cycle_id} onChange={e => setFormData(p => ({...p, cycle_id: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" required>
                       <option value="">-- اختر العنبر --</option>
                       {activeLayerCycles.map(c => <option key={c._id} value={c._id}>{c.barn_id?.name} ({c.name})</option>)}
@@ -242,7 +255,6 @@ const SupervisorEggSales = () => {
                   </div>
                 </div>
 
-                {/* 🛡️ اختيار المندوب المستلم (يظهر فقط إذا تم اختيار شركة) */}
                 <AnimatePresence>
                   {formData.merchant_id && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -250,7 +262,7 @@ const SupervisorEggSales = () => {
                         <label className="mb-1.5 block text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5"><User className="w-4 h-4"/> المندوب / السائق المستلم للطالبية *</label>
                         {availableReps.length > 0 ? (
                           <select value={formData.rep_name} onChange={e => setFormData(p => ({...p, rep_name: e.target.value}))} className="w-full rounded-lg border border-indigo-200 bg-white px-4 py-2.5 text-sm font-bold outline-none focus:border-indigo-500 dark:border-indigo-800 dark:bg-slate-900 dark:text-white" required>
-                            <option value="">-- اختر المندوب الذي سيتسلم الفاتورة --</option>
+                            <option value="">-- اختر المندوب --</option>
                             {availableReps.map(rep => <option key={rep._id} value={rep.name}>{rep.name} {rep.phone ? `(${rep.phone})` : ''}</option>)}
                           </select>
                         ) : (
@@ -264,13 +276,51 @@ const SupervisorEggSales = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">الكمية المباعة (طبق) *</label>
-                    <input type="number" min="1" max={eggStock} value={formData.quantity} onChange={e => setFormData(p => ({...p, quantity: e.target.value}))} className="w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-4 py-3 text-lg font-black text-emerald-700 outline-none focus:border-emerald-500 dark:border-emerald-800 dark:bg-emerald-900/10 dark:text-emerald-400" required />
+                    <input type="number" min="1" value={formData.quantity} onChange={e => setFormData(p => ({...p, quantity: e.target.value}))} className="w-full rounded-xl border border-emerald-200 bg-emerald-50/30 px-4 py-3 text-lg font-black text-emerald-700 outline-none focus:border-emerald-500 dark:border-emerald-800 dark:bg-emerald-900/10 dark:text-emerald-400" required />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">سعر الطبق (ج.م) *</label>
                     <input type="number" step="0.01" min="0.01" value={formData.unit_price} onChange={e => setFormData(p => ({...p, unit_price: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-lg font-black outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white" required />
                   </div>
                 </div>
+
+                {/*  قسم السحب المتقدم (يظهر فقط عند العجز) */}
+                <AnimatePresence>
+                  {deficit > 0 && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                      <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50">
+                        <div className="flex items-center gap-2 mb-3 text-amber-700 dark:text-amber-400">
+                          <ArrowDownCircle className="w-5 h-5" />
+                          <h4 className="font-black text-sm">عجز في المخزن! يجب تحديد مصدر السلفة</h4>
+                        </div>
+                        <p className="text-xs font-bold text-amber-600 dark:text-amber-500 mb-4">
+                          المطلوب {requestedQty} والمتاح {eggStock} طبق. يرجى توزيع العجز (<span className="font-black text-rose-500 text-sm">{deficit}</span> طبق) كسلفة من العنابر لتتم تسويتها آخر اليوم.
+                        </p>
+                        
+                        <div className="space-y-2">
+                          {activeLayerCycles.map(c => (
+                            <div key={c._id} className="flex items-center justify-between bg-white dark:bg-slate-800 p-2 rounded-lg border border-amber-100 dark:border-slate-700">
+                              <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{c.barn_id?.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400">اسحب:</span>
+                                <input 
+                                  type="number" min="0" max={deficit} placeholder="0"
+                                  value={advancedPulls[c._id] || ''}
+                                  onChange={(e) => handlePullChange(c._id, e.target.value)}
+                                  className="w-20 text-center rounded-md border border-slate-200 bg-slate-50 py-1 text-sm font-black outline-none focus:border-amber-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className={`mt-4 text-center font-black text-sm p-2 rounded-lg ${isDeficitCovered ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                          إجمالي المسحوب: {totalPulled} / {deficit} طبق
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 space-y-3">
                   <div className="flex justify-between items-center text-sm">
@@ -289,13 +339,12 @@ const SupervisorEggSales = () => {
                   </div>
                 </div>
 
-                <button type="submit" disabled={isSubmitting || !formData.cycle_id || !formData.merchant_id || !formData.rep_name || Number(formData.quantity) <= 0} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-600 py-4 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-70 shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]">
+                <button type="submit" disabled={isSubmitting || !formData.cycle_id || !formData.merchant_id || !formData.rep_name || requestedQty <= 0 || !isDeficitCovered} className="w-full flex justify-center items-center gap-2 rounded-xl bg-emerald-600 py-4 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-70 shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-5 h-5" /> اعتماد الفاتورة والتسليم</>}
                 </button>
               </form>
             </div>
 
-            {/* 🛡️ أرشيف الفواتير المصدرة (Recent Invoices Archive) */}
             {recentInvoices.length > 0 && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
                 <h3 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
@@ -327,10 +376,7 @@ const SupervisorEggSales = () => {
             )}
           </motion.div>
 
-          {/* الجانب الأيسر: الرصيد (متقدم في الموبايل بفضل order-1، ومأخر في الديسكتوب) */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="order-1 lg:order-2 space-y-4">
-            
-            {/* كارت الرصيد المخزني للبيض */}
             <div className={`p-6 rounded-3xl border shadow-sm flex flex-col items-center justify-center text-center ${eggStock > 0 ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-900/30' : 'bg-rose-50 border-rose-100 dark:bg-rose-900/10 dark:border-rose-900/30'}`}>
               <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl shadow-sm mb-3">
                 <Package className={`w-8 h-8 ${eggStock > 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
@@ -339,10 +385,8 @@ const SupervisorEggSales = () => {
               <p className={`text-4xl font-black ${eggStock > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {eggStock.toLocaleString()} <span className="text-sm font-bold opacity-70">طبق</span>
               </p>
-              {eggStock === 0 && <p className="text-[10px] text-rose-500 mt-2 font-bold">يجب تسجيل يومية إنتاج لتغذية المخزن</p>}
             </div>
 
-            {/* كارت التجار (مبسط للمشرف) */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-2 mb-4 text-slate-800 dark:text-white">
                 <Users className="w-5 h-5 text-indigo-500"/>
@@ -361,7 +405,6 @@ const SupervisorEggSales = () => {
                 <p className="text-xs text-slate-500 text-center">لم يتم إضافة تجار بيض في النظام.</p>
               )}
             </div>
-
           </motion.div>
         </div>
       )}
