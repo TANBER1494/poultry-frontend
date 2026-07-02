@@ -17,7 +17,7 @@ import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
 import merchantService from '../../services/merchantService';
 import inventoryService from '../../services/inventoryService';
-import toast from 'react-hot-toast'; // 🚀 تأكد من استخدام toast بدلاً من showAlert إذا رغبت
+import toast from 'react-hot-toast'; 
 
 const SupervisorEggSales = () => {
   const [farms, setFarms] = useState([]);

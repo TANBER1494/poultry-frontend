@@ -199,6 +199,7 @@ const CyclesManager = () => {
             const startDate = new Date(cycle.start_date);
             const endDate = cycle.status === 'CLOSED' ? new Date(cycle.end_date) : new Date();
             const ageInDays = Math.max(0, Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)));
+            const pendingPulls = cycle.pending_egg_pulls || 0;
 
             return (
               <motion.div key={cycle._id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 flex flex-col h-full">
@@ -218,7 +219,6 @@ const CyclesManager = () => {
                     </div>
                   </div>
                   
-                  {/* إخفاء القائمة المنسدلة في حالة الدورات المغلقة */}
                   {cycle.status !== 'CLOSED' && (
                     <button onClick={() => openOptionsSheet(cycle)} className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors" title="إغلاق محاسبي">
                       <MoreVertical className="w-5 h-5" />
@@ -249,15 +249,16 @@ const CyclesManager = () => {
 
                   {cycle.type === 'LAYER' && (
                     <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-3 col-span-2 sm:col-span-1 border border-amber-100 dark:border-amber-900/30">
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-500 mb-1"><Package className="w-3 h-3"/> إنتاج البيض</div>
+                      <div className="flex justify-between items-start mb-1">
+                         <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-500"><Package className="w-3 h-3"/> إنتاج البيض</div>
+                         {/* 🚀 مراقبة السلف المعلقة في الكارت الخارجي مباشرة */}
+                         {pendingPulls > 0 && <span className="bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded text-[8px] font-black animate-pulse" title="سحوبات معلقة تنتظر التسوية">سلفة: {pendingPulls}</span>}
+                      </div>
                       <p className="text-sm font-black text-amber-800 dark:text-amber-400">{(cycle.total_sold_eggs || 0).toLocaleString()}</p>
-                      <p className="text-[10px] text-amber-600 dark:text-amber-500/70 mt-0.5">مباع (طبق)</p>
+                      <p className="text-[10px] text-amber-600 dark:text-amber-500/70 mt-0.5">مبيعات الدورة</p>
                     </div>
                   )}
                 </div>
-
-                {/* صافي الربح */}
-                
 
                 {/* 🛡️ الأزرار المباشرة السريعة (بدلاً من القائمة المنسدلة) */}
                 <div className="flex items-center gap-2 mt-auto border-t border-slate-100 dark:border-slate-800 pt-4">
@@ -292,7 +293,6 @@ const CyclesManager = () => {
                 </div>
                 <div className="p-5 overflow-y-auto custom-scrollbar">
                   
-                  {/* OPTIONS MODE - مخصصة للإقفال فقط الآن للحماية */}
                   {sheetConfig.mode === 'OPTIONS' && sheetConfig.activeCycle && (
                     <div className="space-y-4">
                        <div className="bg-rose-50 dark:bg-rose-900/20 p-4 rounded-xl border border-rose-100 dark:border-rose-900/30">
@@ -312,7 +312,6 @@ const CyclesManager = () => {
                     </div>
                   )}
 
-                  {/* ADD CYCLE MODE */}
                   {sheetConfig.mode === 'ADD' && (
                     <form onSubmit={handleStartCycle} className="space-y-4">
                       <div>

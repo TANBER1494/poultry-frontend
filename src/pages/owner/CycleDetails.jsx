@@ -21,6 +21,7 @@ import {
   Sparkles,
   Printer,
   User,
+  AlertTriangle
 } from 'lucide-react';
 import cycleService from '../../services/cycleService';
 import dailyLogService from '../../services/dailyLogService';
@@ -45,11 +46,9 @@ const CycleDetails = () => {
     try {
       setIsLoading(true);
 
-      // 1. جلب بيانات الدورة الأساسية
       const cycleData = await cycleService.getCycleDetails(cycleId);
       setCycle(cycleData);
 
-      // 2. 🛡️ التعديل هنا: استخدام الدالة الصحيحة وتمرير farmId
       try {
         const logsData = await dailyLogService.getCycleDailyLogs(
           cycleId,
@@ -60,7 +59,6 @@ const CycleDetails = () => {
         setLogs([]);
       }
 
-      // 3. جلب الفواتير
       try {
         const invoicesData = await invoiceService.getInvoices(farmId, {
           cycle_id: cycleId,
@@ -248,11 +246,11 @@ const CycleDetails = () => {
   const soldBirds = cycle.total_sold_birds || 0;
   const soldEggs = cycle.total_sold_eggs || 0;
   const soldManure = cycle.total_sold_manure || 0;
+  const pendingPulls = cycle.pending_egg_pulls || 0;
 
   const mortalityRate =
     initialBirds > 0 ? ((deadBirds / initialBirds) * 100).toFixed(2) : 0;
 
-  // 🛡️ التعديل الجذري لحساب الربح التقديري اللحظي
   const estimatedProfit =
     (cycle.total_revenue || 0) - (cycle.total_expenses || 0);
   const isProfitable = estimatedProfit >= 0;
@@ -330,6 +328,32 @@ const CycleDetails = () => {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
         >
+          {cycle.type === 'LAYER' && (
+           <div className="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
+              <Activity className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-black text-sm mb-1">معلومة محاسبية (نظام المخزن المجمع)</h4>
+                <p className="text-xs font-medium leading-relaxed">
+                  نظراً لأن بيع البيض يتم من المخزن المجمع للمزرعة، فإن إيرادات المبيعات تعتبر "إيراد عام للمزرعة" وقد تتمركز دفترياً في الدورة الرئيسية. للحصول على تقييم مالي دقيق لقطاع البياض ككل، يرجى الرجوع لشاشة "الماليات".
+                </p>
+              </div>
+           </div>
+          )}
+
+          {cycle.type === 'LAYER' && pendingPulls > 0 && (
+           <div className="bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-4 border border-rose-200 dark:border-rose-800 shadow-sm flex items-center justify-between col-span-full">
+             <div className="flex items-center gap-3">
+               <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">
+                 <AlertTriangle className="w-5 h-5" />
+               </div>
+               <div>
+                 <p className="text-sm font-black text-rose-800 dark:text-rose-300">سحوبات معلقة (سلفة مبيعات)</p>
+                 <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-0.5">تم سحب <span className="font-black">({pendingPulls} طبق)</span> لتغطية المبيعات وتنتظر تسوية المشرف في يومية اليوم.</p>
+               </div>
+             </div>
+           </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
               <div>
@@ -402,7 +426,7 @@ const CycleDetails = () => {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                    صافي الربح / الخسارة{' '}
+                    صافي الأرباح المسجلة{' '}
                     {cycle.status !== 'CLOSED' && '(تقديري)'}
                   </p>
                   <h3
@@ -445,7 +469,7 @@ const CycleDetails = () => {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-500">
-                      إجمالي البيض المباع
+                      إجمالي البيض المباع من خلال الدورة
                     </p>
                     <h4 className="text-lg font-black text-slate-800 dark:text-white">
                       {soldEggs.toLocaleString()}{' '}
