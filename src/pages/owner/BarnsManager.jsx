@@ -309,11 +309,11 @@ const BarnsManager = () => {
                 {getStatusBadge(barn.status)}
                 <button
                   onClick={() =>
-                    navigate(`/owner/cycles/${farmId}?barn=${barn._id}`)
+                    navigate(`/owner/farms/${farmId}/cycles?barn=${barn._id}`)
                   }
                   className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white transition-all hover:bg-emerald-700 active:scale-95"
                 >
-                  عرض التفاصيل
+                  عرض الدورات
                 </button>
               </div>
             </motion.div>

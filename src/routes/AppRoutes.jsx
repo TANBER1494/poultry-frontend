@@ -123,6 +123,7 @@ const AppRoutes = () => {
             <Route path="farms/:farmId/barns" element={<BarnsManager />} />
             <Route path="supervisors" element={<SupervisorsManager />} />
             <Route path="cycles" element={<CyclesManager />} />
+            <Route path="farms/:farmId/cycles" element={<CyclesManager />} />
             <Route
               path="farms/:farmId/cycles/:cycleId"
               element={<CycleDetails />}
