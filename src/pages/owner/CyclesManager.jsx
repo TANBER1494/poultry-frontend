@@ -16,7 +16,6 @@ import {
   LockKeyhole,
   Tractor,
   Package,
-  pendingPulls
 } from 'lucide-react';
 import cycleService from '../../services/cycleService';
 import barnService from '../../services/barnService';
@@ -428,7 +427,6 @@ const CyclesManager = () => {
                         <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-500">
                           <Package className="w-3 h-3" /> إنتاج البيض
                         </div>
-                        {/* 🚀 مراقبة السلف المعلقة في الكارت الخارجي مباشرة */}
                         {pendingPulls > 0 && (
                           <span
                             className="bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded text-[8px] font-black animate-pulse"
