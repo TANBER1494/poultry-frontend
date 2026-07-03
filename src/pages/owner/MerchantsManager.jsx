@@ -127,15 +127,22 @@ const MerchantsManager = () => {
     setSheetConfig({ isOpen: true, mode: 'ADD', activeMerchant: null });
 
   const openStatementSheet = async (merchant) => {
-    setSheetConfig({ isOpen: true, mode: 'STATEMENT', activeMerchant: merchant });
+    setSheetConfig({
+      isOpen: true,
+      mode: 'STATEMENT',
+      activeMerchant: merchant,
+    });
     try {
       setIsStatementLoading(true);
-      const statement = await merchantService.getMerchantStatement(merchant._id);
-      
+      const statement = await merchantService.getMerchantStatement(
+        merchant._id
+      );
+
       setStatementData({
-        invoices: statement.invoices_history || [], // ربط الـ history بـ invoices
-        transactions: statement.transactions_history || [], // ربط الـ history بـ transactions
-        merchant_info: statement.merchant_info
+        invoices: statement.invoices_history || [],
+        transactions: statement.transactions_history || [],
+        merchant_info: statement.merchant_info,
+        total_purchases_qty: statement.total_purchases_qty || 0,
       });
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب كشف حساب التاجر');
@@ -414,15 +421,17 @@ const MerchantsManager = () => {
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 flex justify-between items-center border border-slate-100 dark:border-slate-700">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500 mb-0.5">
-                    الرصيد الحالي (مديونية)
+                <div className="bg-rose-50 dark:bg-rose-900/10 p-4 rounded-2xl border border-rose-100 dark:border-rose-900/30">
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1 flex items-center gap-1">
+                    <Wallet className="w-4 h-4" /> الرصيد (مديونية)
                   </p>
-                  <p
-                    className={`text-base font-black ${merchant.current_balance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}
-                  >
-                    {Math.abs(merchant.current_balance || 0).toLocaleString()}{' '}
-                    ج.م
+                  {/*  القراءة من statementData بدلاً من الكائن الثابت */}
+                  <p className="text-xl font-black text-rose-700 dark:text-rose-300">
+                    {(
+                      statementData?.merchant_info
+                        ?.current_calculated_balance || 0
+                    ).toLocaleString()}{' '}
+                    <span className="text-xs">ج.م</span>
                   </p>
                 </div>
                 <button
