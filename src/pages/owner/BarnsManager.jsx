@@ -308,12 +308,12 @@ const BarnsManager = () => {
 
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
                 {getStatusBadge(barn.status)}
-                <Link
-                  to={`/owner/farms/${farmId}/cycles?barn=${barn._id}`}
-                  className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline transition-all"
+                <button
+                  onClick={() => navigate(`/owner/barn/${barn._id}`)}
+                  className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white transition-all hover:bg-emerald-700 active:scale-95"
                 >
-                  عرض الدورات الإنتاجية
-                </Link>
+                  عرض التفاصيل
+                </button>
               </div>
             </motion.div>
           ))}

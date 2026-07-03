@@ -46,7 +46,7 @@ const barnService = {
    * @returns {Promise<Object>} Response containing success message
    */
   deleteBarn: async (barnId) => {
-    const response = await api.delete(`${BARNS_ENDPOINT}/${barnId}`);
+    const response = await api.delete(`${BARNS_ENDPOINT}/${barnId}`) 
     return response.data;
   }
 };
