@@ -322,6 +322,8 @@ const CyclesManager = () => {
               Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
             );
 
+            const pendingPulls = cycle.pending_egg_pulls || 0;
+
             return (
               <motion.div
                 key={cycle._id}

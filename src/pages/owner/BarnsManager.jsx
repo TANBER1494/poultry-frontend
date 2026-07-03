@@ -53,12 +53,11 @@ const BarnsManager = () => {
       // جلب العنابر
       const response = await barnService.getFarmBarns(farmId);
       setBarns(response.barns || []);
-      
+
       // جلب اسم المزرعة لتحسين تجربة المستخدم
       const farmsRes = await farmService.getFarms();
-      const currentFarm = farmsRes.farms?.find(f => f._id === farmId);
+      const currentFarm = farmsRes.farms?.find((f) => f._id === farmId);
       if (currentFarm) setFarmName(currentFarm.name);
-      
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب بيانات العنابر');
     } finally {
@@ -142,7 +141,7 @@ const BarnsManager = () => {
 
     try {
       setIsActionLoading(true);
-      await barnService.deleteBarn(barn._id, farmId); 
+      await barnService.deleteBarn(barn._id, farmId);
       showAlert.success('تم الحذف', 'تم أرشفة العنبر بنجاح');
       closeSheet();
       fetchBarns();
@@ -224,7 +223,7 @@ const BarnsManager = () => {
           </button>
           <div>
             <h1 className="text-xl font-black text-slate-900 dark:text-white">
-              إدارة عنابر {farmName ? "مزرعة " + `(${farmName})` : ''}
+              إدارة عنابر {farmName ? 'مزرعة ' + `(${farmName})` : ''}
             </h1>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
               العنابر المسجلة: {barns.length}
@@ -309,7 +308,9 @@ const BarnsManager = () => {
               <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
                 {getStatusBadge(barn.status)}
                 <button
-                  onClick={() => navigate(`/owner/farms/${farmId}/cycles?barn=${barn._id}`)}
+                  onClick={() =>
+                    navigate(`/owner/cycles/${farmId}?barn=${barn._id}`)
+                  }
                   className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-bold text-white transition-all hover:bg-emerald-700 active:scale-95"
                 >
                   عرض التفاصيل
