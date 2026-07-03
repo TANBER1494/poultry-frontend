@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   CheckCircle2,
+  ShoppingCart 
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
@@ -28,35 +29,31 @@ const OwnerLayout = () => {
   const { isDarkMode, toggleTheme } = useContext(ThemeContext);
   const location = useLocation();
 
-  // States for responsive menus
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
 
-  // Quick access navigation for mobile bottom bar
+  // 🚀 التعديل الجوهري: إضافة المبيعات وإزالة المشرفين
   const quickNav = [
     { name: 'الرئيسية', href: '/owner/dashboard', icon: LayoutDashboard },
     { name: 'المزارع', href: '/owner/farms', icon: Tractor },
     { name: 'الدورات', href: '/owner/cycles', icon: RefreshCcw },
-    { name: 'المشرفين', href: '/owner/supervisors', icon: Users },
-    { name: 'التجار والموردين', href: '/owner/merchants', icon: Wallet }, 
+    { name: 'المبيعات', href: '/owner/sales', icon: ShoppingCart }, 
+    { name: 'التجار والموردين', href: '/owner/merchants', icon: Users }, 
     { name: 'الماليات', href: '/owner/finances', icon: Wallet },
   ];
 
-  // Secondary navigation to include missing backend modules (Inventory)
   const secondaryNav = [
     { name: 'المخازن والأعلاف', href: '/owner/inventory', icon: Package },
     { name: 'الإعدادات', href: '/owner/settings', icon: Settings },
-    {name: ' الإشتراكات', href: '/owner/subscriptions', icon: CheckCircle2},
+    { name: 'الإشتراكات', href: '/owner/subscriptions', icon: CheckCircle2 },
   ];
 
   const allNav = [...quickNav, ...secondaryNav];
 
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
-  // Dynamic Sidebar Component
   const SidebarContent = () => (
     <div className="flex h-full flex-col bg-white dark:bg-slate-900 border-l border-slate-100 dark:border-slate-800 transition-colors">
-      {/* Sidebar Header / Logo */}
       <div
         className={`flex h-20 shrink-0 items-center border-b border-slate-100 dark:border-slate-800 transition-all duration-300 ${isDesktopSidebarOpen ? 'px-6 justify-start' : 'justify-center px-0'}`}
       >
@@ -77,7 +74,6 @@ const OwnerLayout = () => {
         </div>
       </div>
 
-      {/* Navigation Links */}
       <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden pt-6 pb-4 custom-scrollbar">
         <nav className="flex-1 space-y-2 px-3">
           {allNav.map((item) => {
@@ -111,7 +107,6 @@ const OwnerLayout = () => {
           })}
         </nav>
 
-        {/* Logout Button */}
         <div className="mt-auto px-3 pt-6 border-t border-slate-100 dark:border-slate-800">
           <button
             onClick={logout}
@@ -136,7 +131,6 @@ const OwnerLayout = () => {
 
   return (
     <div className="flex h-[100dvh] w-full bg-slate-50 dark:bg-slate-950 transition-colors pb-16 lg:pb-0">
-      {/* Desktop Sidebar (Collapsible) */}
       <aside
         className={`hidden lg:flex lg:flex-col lg:shrink-0 z-20 transition-all duration-300 ease-in-out ${
           isDesktopSidebarOpen ? 'w-72' : 'w-20'
@@ -145,7 +139,6 @@ const OwnerLayout = () => {
         <SidebarContent />
       </aside>
 
-      {/* Mobile Menu Overlay */}
       <AnimatePresence>
         {isMobileMenuOpen && (
           <>
@@ -170,10 +163,8 @@ const OwnerLayout = () => {
       </AnimatePresence>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Topbar */}
         <header className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/80 sm:px-6 lg:px-8 z-30">
           <div className="flex items-center gap-2">
-            {/* Mobile Hamburger */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="lg:hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 focus:outline-none transition-colors"
@@ -181,7 +172,6 @@ const OwnerLayout = () => {
               <Menu className="h-6 w-6" />
             </button>
 
-            {/* Desktop Sidebar Toggle Button */}
             <button
               onClick={() => setIsDesktopSidebarOpen(!isDesktopSidebarOpen)}
               className="hidden lg:flex rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors focus:outline-none"
@@ -192,7 +182,6 @@ const OwnerLayout = () => {
           </div>
 
           <div className="flex flex-1 items-center justify-end gap-2 sm:gap-4">
-            {/* Dark Mode Toggle */}
             <button
               onClick={toggleTheme}
               className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors focus:outline-none"
@@ -209,7 +198,6 @@ const OwnerLayout = () => {
 
             <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1 sm:mx-2"></div>
 
-            {/* Profile Link (Clickable) */}
             <Link
               to="/owner/settings"
               className="flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-full"
@@ -230,15 +218,12 @@ const OwnerLayout = () => {
           </div>
         </header>
 
-        {/* Dynamic Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
           <Outlet />
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar with FAB (Floating Action Button) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-between border-t border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 lg:hidden px-2 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.4)]">
-        {/* Left Nav Items */}
         <div className="flex w-2/5 justify-around">
           {quickNav.slice(0, 2).map((item) => {
             const isActive = location.pathname.includes(item.href);
@@ -261,7 +246,6 @@ const OwnerLayout = () => {
           })}
         </div>
 
-        {/* Center Prominent ADD Button (FAB) */}
         <div className="relative flex w-1/5 justify-center">
           <Link
             to="/owner/farms"
@@ -272,7 +256,6 @@ const OwnerLayout = () => {
           </Link>
         </div>
 
-        {/* Right Nav Items */}
         <div className="flex w-2/5 justify-around">
           {quickNav.slice(2, 4).map((item) => {
             const isActive = location.pathname.includes(item.href);
