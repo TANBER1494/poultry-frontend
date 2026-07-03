@@ -31,7 +31,6 @@ const merchantService = {
     return response.data;
   },
 
-  // 🛡️ مسارات إدارة المناديب الجديدة
   addRepresentative: async (merchantId, data) => {
     const response = await api.post(`${MERCHANTS_ENDPOINT}/${merchantId}/representatives`, data);
     return response.data;

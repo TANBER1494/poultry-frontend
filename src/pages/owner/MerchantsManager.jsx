@@ -126,23 +126,17 @@ const MerchantsManager = () => {
   const openAddSheet = () =>
     setSheetConfig({ isOpen: true, mode: 'ADD', activeMerchant: null });
 
-  // 🚀 دالة فتح كشف الحساب
   const openStatementSheet = async (merchant) => {
-    setSheetConfig({
-      isOpen: true,
-      mode: 'STATEMENT',
-      activeMerchant: merchant,
-    });
+    setSheetConfig({ isOpen: true, mode: 'STATEMENT', activeMerchant: merchant });
     try {
       setIsStatementLoading(true);
-      // افتراض أن الباك إند يعيد تفاصيل كشف الحساب (الفواتير والمدفوعات)
-      const res = await merchantService.getMerchantStatement(
-        merchant._id,
-        selectedFarmId
-      );
-      setStatementData(
-        res.data || { invoices: [], total_debt: 0, total_purchases: 0 }
-      );
+      const statement = await merchantService.getMerchantStatement(merchant._id);
+      
+      setStatementData({
+        invoices: statement.invoices_history || [], // ربط الـ history بـ invoices
+        transactions: statement.transactions_history || [], // ربط الـ history بـ transactions
+        merchant_info: statement.merchant_info
+      });
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب كشف حساب التاجر');
       closeSheet();
