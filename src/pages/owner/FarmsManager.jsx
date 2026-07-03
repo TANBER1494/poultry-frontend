@@ -14,13 +14,15 @@ import {
   Lock,
   Unlock,
   Home,
-  Package
+  Package,
+  Users 
 } from 'lucide-react';
 import farmService from '../../services/farmService';
 import { showAlert } from '../../utils/alert';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const FarmsManager = () => {
+  const navigate = useNavigate(); // 🚀 تفعيل التوجيه لصفحة المشرفين
   const [farms, setFarms] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -30,7 +32,6 @@ const FarmsManager = () => {
     activeFarm: null,
   });
 
-  // 🛡️ التعديل المعماري: تجريد المزرعة من خصائص العنبر
   const [formData, setFormData] = useState({
     name: '',
     location: '',
@@ -97,193 +98,181 @@ const FarmsManager = () => {
       setIsActionLoading(true);
       if (sheetConfig.mode === 'ADD') {
         await farmService.addFarm(formData);
-        showAlert.success('تمت الإضافة', 'تم تسجيل المزرعة بنجاح');
+        showAlert.success('تمت الإضافة', 'تم إنشاء المزرعة بنجاح');
       } else if (sheetConfig.mode === 'EDIT') {
-        await farmService.updateFarmSettings(sheetConfig.activeFarm._id, formData);
+        await farmService.updateFarm(sheetConfig.activeFarm._id, formData);
         showAlert.success('تم التحديث', 'تم حفظ التعديلات بنجاح');
       }
       closeSheet();
       fetchFarms();
     } catch (error) {
-      showAlert.error('خطأ', error.response?.data?.message || 'فشل تنفيذ العملية');
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تنفيذ العملية');
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  const handleStatusToggle = async (farm) => {
+  const toggleFarmStatus = async (farm) => {
+    if (!window.confirm(`هل أنت متأكد من تغيير حالة المزرعة (${farm.name})؟`)) return;
     try {
       setIsActionLoading(true);
-      if (farm.subscription_status === 'LOCKED') {
-        await farmService.reactivateFarm(farm._id);
-        showAlert.success('تم التنشيط', 'تم إعادة تفعيل المزرعة');
-      } else {
-        await farmService.suspendFarm(farm._id);
-        showAlert.success('تم الإيقاف', 'تم إيقاف المزرعة مؤقتاً');
-      }
+      const newStatus = farm.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+      await farmService.updateFarm(farm._id, { status: newStatus });
+      showAlert.success('تم التحديث', `تم ${newStatus === 'ACTIVE' ? 'تفعيل' : 'إيقاف'} المزرعة بنجاح`);
       closeSheet();
       fetchFarms();
     } catch (error) {
-      showAlert.error('خطأ', error.response?.data?.message || 'فشل تغيير حالة المزرعة');
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تغيير حالة المزرعة');
     } finally {
       setIsActionLoading(false);
     }
   };
 
   const handleDelete = async (farm) => {
-    if (!window.confirm(`هل أنت متأكد من الحذف النهائي لمزرعة (${farm.name})؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-    
+    if (!window.confirm(`تحذير نهائي: هل أنت متأكد من حذف المزرعة (${farm.name}) بالكامل؟`)) return;
     try {
       setIsActionLoading(true);
-      await farmService.hardDeleteFarm(farm._id);
-      showAlert.success('تم الحذف', 'تم حذف المزرعة نهائياً');
+      await farmService.deleteFarm(farm._id);
+      showAlert.success('تم الحذف', 'تم مسح المزرعة من النظام');
       closeSheet();
       fetchFarms();
     } catch (error) {
-      showAlert.error('فشل الحذف', error.response?.data?.message || 'لا يمكن حذف هذه المزرعة');
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'لا يمكن حذف هذه المزرعة لارتباطها بسجلات أخرى');
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'ACTIVE': return <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> نشط</span>;
-      case 'TRIAL': return <span className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1"><Settings2 className="w-3 h-3"/> تجريبي</span>;
-      case 'LOCKED': return <span className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1"><Lock className="w-3 h-3"/> موقوف</span>;
-      default: return <span className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1"><AlertOctagon className="w-3 h-3"/> متأخر</span>;
-    }
-  };
-
-  const sheetVariants = {
-    hidden: { y: '100%', opacity: 0 },
-    visible: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } },
-    exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } }
-  };
-
-  const overlayVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1 },
-    exit: { opacity: 0 }
-  };
+  const sheetVariants = { hidden: { y: '100%', opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } }, exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } } };
+  const overlayVariants = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Header with Prominent Add Button and 🚀 Supervisors Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white">إدارة المزارع</h1>
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-            إجمالي المزارع المسجلة: {farms.length}
+          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <Tractor className="w-6 h-6 text-emerald-500" /> إدارة المزارع
+          </h1>
+          <p className="text-sm font-bold text-slate-500 mt-1">
+            إدارة فروع مزارعك والمرافق التابعة لها
           </p>
         </div>
-        <button
-          onClick={openAddSheet}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">إضافة مزرعة</span>
-          <span className="sm:hidden">إضافة</span>
-        </button>
+        
+        <div className="flex items-center gap-3">
+          {/* 🚀 الزر الجديد للذهاب إلى المشرفين بشكل مباشر من صفحة المزارع */}
+          <button
+            onClick={() => navigate('/owner/supervisors')}
+            className="flex items-center gap-1.5 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-bold text-indigo-600 transition-all hover:bg-indigo-100 active:scale-95 shadow-sm dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
+          >
+            <Users className="h-5 w-5" />
+            <span className="hidden sm:inline">إدارة المشرفين</span>
+          </button>
+
+          <button
+            onClick={openAddSheet}
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 shadow-sm"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="hidden sm:inline">إضافة مزرعة</span>
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+          <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
         </div>
       ) : farms.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 border-dashed bg-white py-16 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800/50">
             <Tractor className="h-8 w-8 text-slate-400 dark:text-slate-500" />
           </div>
-          <h3 className="text-base font-bold text-slate-800 dark:text-white">لا توجد مزارع مسجلة</h3>
-          <p className="mt-1 max-w-sm text-xs font-medium text-slate-500 dark:text-slate-400">
-            قم بإضافة مزرعتك الأولى لتتمكن من إنشاء العنابر وبدء الدورات الإنتاجية.
+          <h3 className="text-lg font-black text-slate-800 dark:text-white">لا توجد مزارع مسجلة</h3>
+          <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400 max-w-md">
+            قم بإضافة المزرعة الأولى لتتمكن من إنشاء العنابر، وإضافة المشرفين، وبدء دورات الإنتاج.
           </p>
           <button
             onClick={openAddSheet}
-            className="mt-6 rounded-lg bg-slate-900 px-5 py-2 text-xs font-bold text-white transition-all hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            className="mt-6 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition-all hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
           >
             إضافة مزرعة الآن
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {farms.map((farm) => (
             <motion.div
               key={farm._id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative flex flex-col justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 hover:shadow-md transition-shadow"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative flex flex-col justify-between rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 hover:shadow-md transition-shadow"
             >
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
-                    <Tractor className="h-5 w-5" />
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${farm.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'}`}>
+                    {farm.status === 'ACTIVE' ? <Tractor className="h-6 w-6" /> : <Lock className="h-6 w-6" />}
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-white truncate max-w-[140px]">{farm.name}</h3>
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                      <MapPin className="h-3 w-3" />
-                      <span className="truncate max-w-[120px]">{farm.location}</span>
+                    <h3 className="text-base font-black text-slate-800 dark:text-white line-clamp-1">{farm.name}</h3>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 mt-1">
+                      <MapPin className="h-3.5 w-3.5" />
+                      <span className="line-clamp-1">{farm.location}</span>
                     </div>
                   </div>
                 </div>
                 <button
                   onClick={() => openOptionsSheet(farm)}
-                  className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 focus:outline-none"
+                  className="rounded-xl p-1.5 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 focus:outline-none"
                 >
                   <MoreVertical className="h-5 w-5" />
                 </button>
               </div>
 
-              {/* 🛡️ التعديل المعماري: تم استبدال الخصائص بزر لإدارة عنابر هذه المزرعة */}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <Link 
-                  to={`/owner/farms/${farm._id}/barns`}
-                  className="flex items-center justify-center gap-2 w-full bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 py-2 rounded-xl text-xs font-bold transition-colors"
-                >
-                  <Home className="w-4 h-4" />
-                  إدارة عنابر المزرعة
-                </Link>
+              {/* 🛡️ إحصائيات المزرعة المحدثة بدون ربط بالعنابر */}
+              <div className="grid grid-cols-2 gap-2 mb-5">
+                <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-800/50">
+                  <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400">حالة المزرعة</p>
+                  {farm.status === 'ACTIVE' ? (
+                    <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3"/> نشطة</p>
+                  ) : (
+                    <p className="text-xs font-black text-rose-600 dark:text-rose-400 mt-1 flex items-center justify-center gap-1"><AlertOctagon className="w-3 h-3"/> معطلة</p>
+                  )}
+                </div>
+                <div className="rounded-xl bg-indigo-50 p-3 text-center dark:bg-indigo-900/10">
+                  <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">مصنع أعلاف</p>
+                  <p className="text-xs font-black text-indigo-700 dark:text-indigo-300 mt-1">
+                    {farm.has_feed_mill ? 'يوجد مصنع' : 'لا يوجد'}
+                  </p>
+                </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
-                <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <Package className="w-3.5 h-3.5 text-amber-500" />
-                  رصيد العلف: {farm.total_feed_stock ? farm.total_feed_stock.toLocaleString() : 0} 
-                </div>
-                {getStatusBadge(farm.subscription_status)}
+              {/* 🛡️ تعديل الزر الرئيسي للتنقل لصفحة العنابر */}
+              <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Link
+                  to={`/owner/farms/${farm._id}/barns`}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 text-sm font-bold text-white transition-all hover:bg-slate-800 active:scale-95 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                >
+                  <Home className="h-4 w-4" /> إدارة العنابر والمخازن
+                </Link>
               </div>
             </motion.div>
           ))}
         </div>
       )}
 
+      {/* Bottom Sheet Modal */}
       <AnimatePresence>
         {sheetConfig.isOpen && (
           <>
-            <motion.div
-              variants={overlayVariants}
-              initial="hidden"
-              animate="visible"
-              exit="hidden"
-              onClick={closeSheet}
-              className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"
-            />
-
+            <motion.div variants={overlayVariants} initial="hidden" animate="visible" exit="hidden" onClick={closeSheet} className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm" />
             <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4">
-              <motion.div
-                variants={sheetVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                className="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto overflow-hidden flex flex-col max-h-[90dvh]"
-              >
+              <motion.div variants={sheetVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto overflow-hidden flex flex-col max-h-[90dvh]">
                 <div className="w-full flex justify-center pt-3 pb-1 sm:hidden">
                   <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full"></div>
                 </div>
 
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
                   <h3 className="text-base font-black text-slate-800 dark:text-white">
                     {sheetConfig.mode === 'ADD' && 'إضافة مزرعة جديدة'}
                     {sheetConfig.mode === 'EDIT' && 'تعديل بيانات المزرعة'}
@@ -294,66 +283,66 @@ const FarmsManager = () => {
                   </button>
                 </div>
 
-                <div className="p-5 overflow-y-auto custom-scrollbar">
-                  
+                <div className="p-6 overflow-y-auto custom-scrollbar">
                   {sheetConfig.mode === 'OPTIONS' && sheetConfig.activeFarm && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <button
                         onClick={() => openEditSheet(sheetConfig.activeFarm)}
-                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-bold text-sm transition-colors"
+                        className="w-full flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 font-bold text-sm transition-colors"
                       >
-                        <Settings2 className="w-4 h-4" /> تعديل البيانات الأساسية
+                        <Settings2 className="w-5 h-5" /> الإعدادات وتعديل البيانات
                       </button>
-                      
+
                       <button
-                        onClick={() => handleStatusToggle(sheetConfig.activeFarm)}
-                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-amber-50 dark:hover:bg-amber-900/20 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 font-bold text-sm transition-colors"
+                        onClick={() => toggleFarmStatus(sheetConfig.activeFarm)}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl font-bold text-sm transition-colors border ${
+                          sheetConfig.activeFarm.status === 'ACTIVE'
+                            ? 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 border-amber-100 dark:border-amber-900/30'
+                            : 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 border-emerald-100 dark:border-emerald-900/30'
+                        }`}
                       >
-                        {sheetConfig.activeFarm.subscription_status === 'LOCKED' ? (
-                          <><Unlock className="w-4 h-4" /> إعادة تنشيط المزرعة</>
-                        ) : (
-                          <><Lock className="w-4 h-4" /> إيقاف المزرعة مؤقتاً</>
-                        )}
+                        {sheetConfig.activeFarm.status === 'ACTIVE' ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+                        {sheetConfig.activeFarm.status === 'ACTIVE' ? 'إيقاف وتعطيل المزرعة' : 'تفعيل المزرعة'}
                       </button>
 
                       <button
                         onClick={() => handleDelete(sheetConfig.activeFarm)}
-                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30 font-bold text-sm transition-colors mt-4 border border-rose-100 dark:border-rose-900/30"
+                        className="w-full flex items-center gap-3 p-4 rounded-xl bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/30 font-bold text-sm transition-colors mt-2 border border-rose-100 dark:border-rose-900/30"
                       >
-                        <Trash2 className="w-4 h-4" /> حذف المزرعة نهائياً
+                        <Trash2 className="w-5 h-5" /> مسح المزرعة نهائياً
                       </button>
                     </div>
                   )}
 
                   {(sheetConfig.mode === 'ADD' || sheetConfig.mode === 'EDIT') && (
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-5">
                       <div>
-                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">اسم المزرعة *</label>
+                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">اسم المزرعة أو الفرع *</label>
                         <input
                           name="name"
                           type="text"
                           value={formData.name}
                           onChange={handleFormChange}
-                          placeholder="مثال: مزرعة الهيشة"
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          placeholder="مثال: مزرعة الأمل - فرع الصعيد"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                           required
                         />
                       </div>
-                      
+
                       <div>
-                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">الموقع / العنوان *</label>
+                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">العنوان أو الموقع *</label>
                         <input
                           name="location"
                           type="text"
                           value={formData.location}
                           onChange={handleFormChange}
-                          placeholder="مثال: طريق الإسماعيلية الصحراوي"
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          placeholder="مثال: الطريق الصحراوي الغربي، الكيلو 50"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                           required
                         />
                       </div>
 
-                      <label className="mt-2 flex items-center gap-2 cursor-pointer p-3 rounded-xl border border-slate-100 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-800/30">
+                      <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 cursor-pointer hover:bg-slate-100 transition-colors dark:border-slate-800 dark:bg-slate-800/30">
                         <input
                           name="has_feed_mill"
                           type="checkbox"
@@ -368,7 +357,7 @@ const FarmsManager = () => {
                         <button
                           type="submit"
                           disabled={isActionLoading}
-                          className="flex w-full justify-center items-center rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-70"
+                          className="flex w-full justify-center items-center rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 disabled:opacity-70 shadow-lg shadow-emerald-600/20"
                         >
                           {isActionLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'حفظ بيانات المزرعة'}
                         </button>
