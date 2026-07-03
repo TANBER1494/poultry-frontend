@@ -9,7 +9,6 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
-  Receipt,
   Activity,
   ShieldCheck,
   Home,
@@ -25,7 +24,6 @@ import {
 } from 'lucide-react';
 import cycleService from '../../services/cycleService';
 import dailyLogService from '../../services/dailyLogService';
-import invoiceService from '../../services/invoiceService';
 import { showAlert } from '../../utils/alert';
 
 const CycleDetails = () => {
@@ -34,7 +32,6 @@ const CycleDetails = () => {
 
   const [cycle, setCycle] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('OVERVIEW');
 
@@ -59,14 +56,6 @@ const CycleDetails = () => {
         setLogs([]);
       }
 
-      try {
-        const invoicesData = await invoiceService.getInvoices(farmId, {
-          cycle_id: cycleId,
-        });
-        setInvoices(invoicesData.invoices || []);
-      } catch (invErr) {
-        setInvoices([]);
-      }
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب تفاصيل الدورة');
       navigate(`/owner/farms/${farmId}/cycles`);
@@ -111,64 +100,6 @@ const CycleDetails = () => {
     const end = status === 'CLOSED' && endDate ? new Date(endDate) : new Date();
     const diffTime = Math.abs(end - start);
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  const handlePrintSales = () => {
-    const printContent = `
-      <html dir="rtl">
-        <head>
-          <title>مبيعات دورة ${cycle.name}</title>
-          <style>
-            body { font-family: 'Tahoma', Arial, sans-serif; padding: 20px; color: #333; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-            th, td { border: 1px solid #ddd; padding: 10px; text-align: right; }
-            th { background-color: #4f46e5; color: white; }
-            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h2>سجل المبيعات والفواتير</h2>
-            <h3>دورة: ${cycle.name} | العنبر: ${cycle.barn_id?.name}</h3>
-            <p>إجمالي المبيعات الموثقة: ${formatCurrency(cycle.total_revenue)}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>رقم الفاتورة</th>
-                <th>العميل / التاجر</th>
-                <th>الإجمالي</th>
-                <th>المدفوع نقداً</th>
-                <th>الباقي الآجل</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${invoices
-                .map(
-                  (inv) => `
-                <tr>
-                  <td>${new Date(inv.invoice_date).toLocaleDateString('ar-EG')}</td>
-                  <td dir="ltr">#${inv.local_id.split('_')[1] || inv.local_id}</td>
-                  <td>${inv.merchant_id?.company_name || 'غير محدد'}</td>
-                  <td>${inv.total_amount.toLocaleString()} ج.م</td>
-                  <td>${inv.paid_amount.toLocaleString()} ج.م</td>
-                  <td>${inv.remaining_amount.toLocaleString()} ج.م</td>
-                </tr>
-              `
-                )
-                .join('')}
-            </tbody>
-          </table>
-          <div class="footer"><p>نظام إدارة المزارع - تقرير مبيعات الدورة</p></div>
-        </body>
-      </html>
-    `;
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
   };
 
   const handlePrintLogs = () => {
@@ -307,12 +238,6 @@ const CycleDetails = () => {
           className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all whitespace-nowrap ${activeTab === 'OVERVIEW' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
         >
           نظرة عامة وإحصائيات
-        </button>
-        <button
-          onClick={() => setActiveTab('SALES')}
-          className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all whitespace-nowrap ${activeTab === 'SALES' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-        >
-          سجل المبيعات
         </button>
         <button
           onClick={() => setActiveTab('LOGS')}
@@ -500,97 +425,6 @@ const CycleDetails = () => {
               </div>
             </div>
           )}
-        </motion.div>
-      )}
-
-      {activeTab === 'SALES' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
-        >
-          <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-            <div>
-              <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2 text-sm sm:text-base">
-                <Receipt className="w-4 h-4 text-indigo-500" /> سجل المبيعات
-                والفواتير
-              </h3>
-              <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">
-                تم إصدار {invoices.length} فاتورة
-              </p>
-            </div>
-            <button
-              onClick={handlePrintSales}
-              disabled={invoices.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
-            >
-              <Printer className="w-4 h-4" />{' '}
-              <span className="hidden sm:inline">طباعة السجل</span>
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-slate-500 dark:text-slate-400">
-                <tr>
-                  <th className="p-4">التاريخ</th>
-                  <th className="p-4">الفاتورة</th>
-                  <th className="p-4">العميل</th>
-                  <th className="p-4">الإجمالي</th>
-                  <th className="p-4 text-emerald-600 dark:text-emerald-400">
-                    المدفوع
-                  </th>
-                  <th className="p-4 text-rose-500">الباقي</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {invoices.length > 0 ? (
-                  invoices.map((inv) => (
-                    <tr
-                      key={inv._id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
-                    >
-                      <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-1.5">
-                          <CalendarDays className="w-4 h-4 text-slate-400" />{' '}
-                          {new Date(inv.invoice_date).toLocaleDateString(
-                            'ar-EG'
-                          )}
-                        </div>
-                      </td>
-                      <td
-                        className="p-4 font-black text-slate-400 text-xs"
-                        dir="ltr"
-                      >
-                        #{inv.local_id.split('_')[1] || inv.local_id}
-                      </td>
-                      <td className="p-4 font-bold text-slate-800 dark:text-white">
-                        {inv.merchant_id?.company_name || 'غير محدد'}
-                      </td>
-                      <td className="p-4 font-black text-indigo-600 dark:text-indigo-400">
-                        {inv.total_amount.toLocaleString()} ج.م
-                      </td>
-                      <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">
-                        {inv.paid_amount.toLocaleString()}
-                      </td>
-                      <td className="p-4 font-black text-rose-500">
-                        {inv.remaining_amount.toLocaleString()}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan="6"
-                      className="p-8 text-center text-slate-500 font-bold"
-                    >
-                      لا توجد مبيعات مسجلة لهذه الدورة
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </motion.div>
       )}
 

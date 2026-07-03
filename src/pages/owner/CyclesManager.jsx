@@ -448,7 +448,6 @@ const CyclesManager = () => {
                   )}
                 </div>
 
-                {/* 🛡️ الأزرار المباشرة السريعة (بدلاً من القائمة المنسدلة) */}
                 <div className="flex items-center gap-2 mt-auto border-t border-slate-100 dark:border-slate-800 pt-4">
                   <button
                     onClick={() =>
@@ -456,23 +455,10 @@ const CyclesManager = () => {
                         `/owner/farms/${selectedFarmId}/cycles/${cycle._id}`
                       )
                     }
-                    className="flex-1 bg-emerald-50 text-emerald-700 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-colors flex justify-center items-center gap-1.5 dark:bg-emerald-900/20 dark:text-emerald-400"
+                    className="w-full bg-emerald-50 text-emerald-700 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-100 transition-colors flex justify-center items-center gap-1.5 dark:bg-emerald-900/20 dark:text-emerald-400"
                   >
                     <Activity className="w-4 h-4" /> التفاصيل واليوميات
                   </button>
-
-                  {cycle.status !== 'CLOSED' && (
-                    <button
-                      onClick={() =>
-                        navigate(
-                          `/owner/sales?farm=${selectedFarmId}&cycle=${cycle._id}&action=new`
-                        )
-                      }
-                      className="flex-1 bg-indigo-50 text-indigo-700 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors flex justify-center items-center gap-1.5 dark:bg-indigo-900/20 dark:text-indigo-400"
-                    >
-                      <ShoppingCart className="w-4 h-4" /> إدارة المبيعات
-                    </button>
-                  )}
                 </div>
               </motion.div>
             );
