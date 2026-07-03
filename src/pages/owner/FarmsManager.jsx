@@ -14,7 +14,8 @@ import {
   Lock,
   Unlock,
   Home,
-  Package
+  Package,
+  Users 
 } from 'lucide-react';
 import farmService from '../../services/farmService';
 import { showAlert } from '../../utils/alert';
@@ -30,7 +31,6 @@ const FarmsManager = () => {
     activeFarm: null,
   });
 
-  // 🛡️ التعديل المعماري: تجريد المزرعة من خصائص العنبر
   const [formData, setFormData] = useState({
     name: '',
     location: '',
@@ -236,14 +236,21 @@ const FarmsManager = () => {
                 </button>
               </div>
 
-              {/* 🛡️ التعديل المعماري: تم استبدال الخصائص بزر لإدارة عنابر هذه المزرعة */}
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* 🚀 التعديل: قسم الأزرار (شبكة من زرين) */}
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2">
                 <Link 
                   to={`/owner/farms/${farm._id}/barns`}
-                  className="flex items-center justify-center gap-2 w-full bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 py-2 rounded-xl text-xs font-bold transition-colors"
+                  className="flex items-center justify-center gap-1.5 w-full bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 py-2 rounded-xl text-xs font-bold transition-colors"
                 >
                   <Home className="w-4 h-4" />
-                  إدارة عنابر المزرعة
+                  العنابر
+                </Link>
+                <Link 
+                  to={`/owner/supervisors?farm=${farm._id}`}
+                  className="flex items-center justify-center gap-1.5 w-full bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 py-2 rounded-xl text-xs font-bold transition-colors"
+                >
+                  <Users className="w-4 h-4" />
+                  المشرفين
                 </Link>
               </div>
 
