@@ -102,7 +102,7 @@ const Login = () => {
               <img
                 src="/logo.png"
                 alt="Mazraaty Logo"
-                className="h-22 w-22 object-contain"
+                className="h-18 w-18 object-contain"
               />
             </div>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white sm:text-4xl">
