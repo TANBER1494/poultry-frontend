@@ -45,10 +45,12 @@ const barnService = {
    * @param {string} barnId - The ID of the Barn
    * @returns {Promise<Object>} Response containing success message
    */
-  deleteBarn: async (barnId) => {
-    const response = await api.delete(`${BARNS_ENDPOINT}/${barnId}`) 
+  deleteBarn: async (barnId, farmId) => {
+    const response = await api.delete(`${BARNS_ENDPOINT}/${barnId}`, {
+      data: { farm_id: farmId },
+    });
     return response.data;
-  }
+  },
 };
 
 export default barnService;
