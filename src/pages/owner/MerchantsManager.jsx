@@ -21,10 +21,9 @@ import {
   ShoppingCart,
   ArrowDownToLine,
   ArrowUpFromLine,
-  CheckCircle2,
-  TrendingUp,
-  TrendingDown,
-  BadgeDollarSign,
+  UserPlus,
+  UserMinus,
+  AlertTriangle,
 } from 'lucide-react';
 import merchantService from '../../services/merchantService';
 import farmService from '../../services/farmService';
@@ -34,8 +33,9 @@ import { showAlert } from '../../utils/alert';
 const MerchantsManager = () => {
   const [farms, setFarms] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState('');
+  const [farmName, setFarmName] = useState('');
   const [merchants, setMerchants] = useState([]);
-  const [cycles, setCycles] = useState([]); // 🚀 لجلب الدورات عند البيع
+  const [cycles, setCycles] = useState([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -48,7 +48,7 @@ const MerchantsManager = () => {
   // تحكم الشيتات والنوافذ
   const [sheetConfig, setSheetConfig] = useState({
     isOpen: false,
-    mode: 'ADD_MERCHANT', // ADD_MERCHANT, EDIT_MERCHANT, STATEMENT, ADD_SALE, ADD_PAYMENT
+    mode: 'ADD_MERCHANT', // ADD_MERCHANT, EDIT_MERCHANT, STATEMENT, ADD_SALE, ADD_PAYMENT, REPS, OPTIONS
     activeMerchant: null,
   });
 
@@ -81,6 +81,35 @@ const MerchantsManager = () => {
     notes: '',
   });
 
+  // 🚀 إرجاع متغيرات المناديب
+  const [repFormData, setRepFormData] = useState({ name: '', phone: '' });
+
+  // 🚀 Live Calculation State
+  const [calculatedTotal, setCalculatedTotal] = useState(0);
+  const [calculatedRemaining, setCalculatedRemaining] = useState(0);
+
+  // 🚀 تحديث الحسابات اللحظية عند تغيير المدخلات
+  useEffect(() => {
+    let total = 0;
+    if (saleData.sale_category === 'BIRDS') {
+      total =
+        (Number(saleData.total_weight_kg) || 0) *
+        (Number(saleData.unit_price) || 0);
+    } else {
+      total =
+        (Number(saleData.quantity) || 0) * (Number(saleData.unit_price) || 0);
+    }
+    const remaining = total - (Number(saleData.paid_amount) || 0);
+    setCalculatedTotal(total);
+    setCalculatedRemaining(remaining > 0 ? remaining : 0);
+  }, [
+    saleData.quantity,
+    saleData.total_weight_kg,
+    saleData.unit_price,
+    saleData.paid_amount,
+    saleData.sale_category,
+  ]);
+
   useEffect(() => {
     let isMounted = true;
     const initialize = async () => {
@@ -92,7 +121,10 @@ const MerchantsManager = () => {
 
         if (fetchedFarms.length > 0) {
           const firstFarm = fetchedFarms[0]._id;
-          if (isMounted) setSelectedFarmId(firstFarm);
+          if (isMounted) {
+            setSelectedFarmId(firstFarm);
+            setFarmName(fetchedFarms[0].name);
+          }
           await loadFarmData(firstFarm, isMounted);
         } else {
           if (isMounted) setIsLoading(false);
@@ -128,6 +160,8 @@ const MerchantsManager = () => {
   const handleFarmChange = async (e) => {
     const newFarmId = e.target.value;
     setSelectedFarmId(newFarmId);
+    const selected = farms.find((f) => f._id === newFarmId);
+    if (selected) setFarmName(selected.name);
     setIsLoading(true);
     await loadFarmData(newFarmId);
   };
@@ -140,6 +174,7 @@ const MerchantsManager = () => {
     });
     setStatementData(null);
     setStatementSearch('');
+    setRepFormData({ name: '', phone: '' });
   };
 
   // ==================== المعالجات (Handlers) ====================
@@ -175,6 +210,9 @@ const MerchantsManager = () => {
 
   const handleSaleSubmit = async (e) => {
     e.preventDefault();
+    if (!saleData.cycle_id)
+      return showAlert.error('بيانات ناقصة', 'يجب تحديد الدورة (مصدر البضاعة)');
+
     try {
       setIsActionLoading(true);
       const localId = `INV-${Date.now()}`;
@@ -200,7 +238,6 @@ const MerchantsManager = () => {
         'تم إنشاء الفاتورة بنجاح وتوجيه الحسابات'
       );
 
-      // إذا كنا داخل كشف الحساب، نعيد تحميله
       if (sheetConfig.activeMerchant) {
         await openStatementSheet(sheetConfig.activeMerchant);
       } else {
@@ -221,21 +258,72 @@ const MerchantsManager = () => {
     e.preventDefault();
     try {
       setIsActionLoading(true);
-      await merchantService.recordPayment(
-        sheetConfig.activeMerchant._id,
-        paymentData
-      );
+      // 🚀 إجبار نوع الدفعة لتكون قبض دائمًا كما طلبت
+      await merchantService.recordPayment(sheetConfig.activeMerchant._id, {
+        ...paymentData,
+        type: 'IN',
+      });
       showAlert.success(
         'تم التسجيل',
-        'تم تسجيل الدفعة النقدية وتحديث المديونية بنجاح'
+        'تم تحصيل الدفعة النقدية وتحديث المديونية بنجاح'
       );
-      await openStatementSheet(sheetConfig.activeMerchant); // إعادة تحميل كشف الحساب
+      await openStatementSheet(sheetConfig.activeMerchant);
       loadFarmData(selectedFarmId);
     } catch (error) {
       showAlert.error(
         'فشل العملية',
         error.response?.data?.message || 'تعذر تسجيل الدفعة'
       );
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // 🚀 معالجات المناديب
+  const handleAddRep = async (e) => {
+    e.preventDefault();
+    if (!repFormData.name) return showAlert.error('خطأ', 'اسم المندوب مطلوب');
+    try {
+      setIsActionLoading(true);
+      const payload = { ...repFormData, farm_id: selectedFarmId };
+      const updatedMerchant = await merchantService.addRepresentative(
+        sheetConfig.activeMerchant._id,
+        payload
+      );
+      setSheetConfig((prev) => ({
+        ...prev,
+        activeMerchant: updatedMerchant.merchant,
+      }));
+      setRepFormData({ name: '', phone: '' });
+      showAlert.success('نجاح', 'تم إضافة المندوب للشركة');
+      loadFarmData(selectedFarmId, false);
+    } catch (error) {
+      showAlert.error(
+        'خطأ',
+        error.response?.data?.message || 'فشل إضافة المندوب'
+      );
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleRemoveRep = async (repId) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذا المندوب؟')) return;
+    try {
+      setIsActionLoading(true);
+      const updatedMerchant = await merchantService.removeRepresentative(
+        sheetConfig.activeMerchant._id,
+        repId,
+        selectedFarmId
+      );
+      setSheetConfig((prev) => ({
+        ...prev,
+        activeMerchant: updatedMerchant.merchant,
+      }));
+      showAlert.success('نجاح', 'تم حذف المندوب');
+      loadFarmData(selectedFarmId, false);
+    } catch (error) {
+      showAlert.error('خطأ', 'فشل حذف المندوب');
     } finally {
       setIsActionLoading(false);
     }
@@ -302,9 +390,31 @@ const MerchantsManager = () => {
     });
   };
 
+  const openOptionsSheet = (merchant) =>
+    setSheetConfig({ isOpen: true, mode: 'OPTIONS', activeMerchant: merchant });
+
+  const openRepsSheet = (merchant) => {
+    setRepFormData({ name: '', phone: '' });
+    setSheetConfig({ isOpen: true, mode: 'REPS', activeMerchant: merchant });
+  };
+
+  const openEditSheet = (merchant) => {
+    setMerchantData({
+      company_name: merchant.company_name,
+      merchant_type: merchant.merchant_type,
+      company_phone: merchant.company_phone,
+      address: merchant.address,
+      opening_balance: merchant.opening_balance,
+    });
+    setSheetConfig({
+      isOpen: true,
+      mode: 'EDIT_MERCHANT',
+      activeMerchant: merchant,
+    });
+  };
+
   // ==================== دوال المساعدة للواجهة ====================
 
-  // دمج الفواتير والسندات في تايم لاين واحد
   const getUnifiedTimeline = () => {
     if (!statementData) return [];
     const invs = statementData.invoices.map((i) => ({
@@ -339,6 +449,16 @@ const MerchantsManager = () => {
     if (category === 'BIRDS') return ['MEAT_BUYER', 'GENERAL'];
     if (category === 'MANURE') return ['MANURE_BUYER', 'GENERAL'];
     return ['GENERAL', 'EGG_BUYER', 'MEAT_BUYER', 'FEED_SUPPLIER'];
+  };
+
+  const getMerchantTypeLabel = (type) => {
+    const types = {
+      EGG_BUYER: 'تاجر بيض',
+      MEAT_BUYER: 'تاجر طيور/لحم',
+      FEED_SUPPLIER: 'مورد أعلاف',
+      GENERAL: 'عام',
+    };
+    return types[type] || type;
   };
 
   // ==================== دوال الطباعة ====================
@@ -382,6 +502,10 @@ const MerchantsManager = () => {
     const merchant = sheetConfig.activeMerchant;
     const timeline = getUnifiedTimeline();
 
+    // 🚀 القراءة من المديونية الحية القادمة من الباك إند
+    const currentDebt =
+      statementData?.merchant_info?.current_calculated_balance || 0;
+
     const printContent = `
       <html dir="rtl">
         <head>
@@ -408,8 +532,8 @@ const MerchantsManager = () => {
           </div>
           
           <div class="summary">
-            <div><h4>الرصيد الحالي (المديونية)</h4><p class="debt">${(merchant.current_balance || 0).toLocaleString()} ج.م</p></div>
-            <div><h4>إجمالي المسحوبات</h4><p>${(statementData.total_purchases_qty || 0).toLocaleString()}</p></div>
+            <div><h4>الرصيد الحالي (المديونية)</h4><p class="debt">${Math.abs(currentDebt).toLocaleString()} ج.م ${currentDebt > 0 ? '(عليه)' : currentDebt < 0 ? '(له)' : ''}</p></div>
+            <div><h4>إجمالي المسحوبات (الكمية)</h4><p>${(statementData.total_purchases_qty || 0).toLocaleString()}</p></div>
           </div>
 
           <table>
@@ -430,16 +554,21 @@ const MerchantsManager = () => {
                   const docId =
                     (item.local_id || '').split('_').pop() ||
                     item._id.slice(-6);
+                  // 🚀 إضافة المندوب في الطباعة
+                  const repText =
+                    item.notes ||
+                    (item.representative_name
+                      ? `المندوب: ${item.representative_name}`
+                      : '-');
 
                   if (item._recordType === 'INVOICE') {
                     return `<tr>
                     <td>${date}</td><td dir="ltr">#${docId}</td><td>فاتورة مبيعات</td>
-                    <td>${item.notes || '-'}</td><td class="debt">${Number(item.total_amount).toLocaleString()}</td>
+                    <td>${repText}</td><td class="debt">${Number(item.total_amount).toLocaleString()}</td>
                     <td class="credit">${Number(item.paid_amount).toLocaleString()}</td>
                   </tr>`;
                   } else {
-                    // Transaction (Payment)
-                    if (item.invoice_id) return ''; // لا نطبع السندات المرتبطة بفاتورة لأنها ظهرت في الفاتورة
+                    if (item.invoice_id) return '';
                     const isPaymentFromHim = item.type === 'IN';
                     return `<tr>
                     <td>${date}</td><td dir="ltr">#${docId}</td><td>سند ${isPaymentFromHim ? 'قبض' : 'صرف'}</td>
@@ -576,32 +705,15 @@ const MerchantsManager = () => {
                       {merchant.company_name}
                     </h3>
                     <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-md mt-1 inline-block">
-                      {merchant.merchant_type === 'EGG_BUYER'
-                        ? 'تاجر بيض'
-                        : merchant.merchant_type === 'MEAT_BUYER'
-                          ? 'تاجر لحم/طيور'
-                          : 'مورد/عام'}
+                      {getMerchantTypeLabel(merchant.merchant_type)}
                     </span>
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    setMerchantData({
-                      company_name: merchant.company_name,
-                      merchant_type: merchant.merchant_type,
-                      company_phone: merchant.company_phone,
-                      address: merchant.address,
-                      opening_balance: merchant.opening_balance,
-                    });
-                    setSheetConfig({
-                      isOpen: true,
-                      mode: 'EDIT_MERCHANT',
-                      activeMerchant: merchant,
-                    });
-                  }}
+                  onClick={() => openOptionsSheet(merchant)}
                   className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                 >
-                  <Settings2 className="w-5 h-5" />
+                  <MoreVertical className="w-5 h-5" />
                 </button>
               </div>
 
@@ -609,7 +721,7 @@ const MerchantsManager = () => {
                 <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 flex justify-between items-center border border-slate-100 dark:border-slate-700/50 mb-4">
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 mb-0.5">
-                      الرصيد الحالي للمحاسبة
+                      المديونية الحالية
                     </p>
                     <p
                       className={`text-base font-black ${merchant.current_balance > 0 ? 'text-rose-600 dark:text-rose-400' : merchant.current_balance < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}
@@ -619,9 +731,9 @@ const MerchantsManager = () => {
                       <span className="text-[10px] mr-1">
                         (
                         {merchant.current_balance > 0
-                          ? 'عليه/مديونية'
+                          ? 'عليه'
                           : merchant.current_balance < 0
-                            ? 'له/دائن'
+                            ? 'له'
                             : 'مُصفى'}
                         )
                       </span>
@@ -630,18 +742,19 @@ const MerchantsManager = () => {
                 </div>
               </div>
 
+              {/* 🚀 إزالة زر المبيعات واستبداله بزر كشف الحساب/المبيعات */}
               <div className="grid grid-cols-2 gap-2 mt-auto border-t border-slate-100 dark:border-slate-800 pt-3">
                 <button
-                  onClick={() => openAddSale(merchant)}
+                  onClick={() => openStatementSheet(merchant)}
                   className="flex justify-center items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 py-2 rounded-xl text-xs font-bold transition-colors"
                 >
-                  <ShoppingCart className="w-4 h-4" /> بيع للشركة
+                  <Receipt className="w-4 h-4" /> عرض المبيعات والحساب
                 </button>
                 <button
                   onClick={() => openAddPayment(merchant)}
                   className="flex justify-center items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 dark:text-emerald-400 py-2 rounded-xl text-xs font-bold transition-colors"
                 >
-                  <BadgeDollarSign className="w-4 h-4" /> تحصيل/سداد
+                  <ArrowDownToLine className="w-4 h-4" /> تحصيل دفعة
                 </button>
               </div>
             </motion.div>
@@ -694,9 +807,16 @@ const MerchantsManager = () => {
                     {sheetConfig.mode === 'ADD_PAYMENT' && (
                       <>
                         <BadgeDollarSign className="w-5 h-5 text-emerald-500" />{' '}
-                        تسجيل دفعة نقدية (سداد/تحصيل)
+                        تحصيل دفعة نقدية
                       </>
                     )}
+                    {sheetConfig.mode === 'REPS' && (
+                      <>
+                        <Users className="w-5 h-5 text-indigo-500" /> إدارة
+                        مناديب الشركة
+                      </>
+                    )}
+                    {sheetConfig.mode === 'OPTIONS' && 'خيارات الشركة'}
                   </h3>
                   <button
                     onClick={closeSheet}
@@ -707,7 +827,7 @@ const MerchantsManager = () => {
                 </div>
 
                 <div className="p-6 overflow-y-auto custom-scrollbar">
-                  {/* === شاشة كشف الحساب الموحدة === */}
+                  {/* === شاشة كشف الحساب המوحدة === */}
                   {sheetConfig.mode === 'STATEMENT' &&
                     sheetConfig.activeMerchant && (
                       <div className="space-y-6">
@@ -741,8 +861,8 @@ const MerchantsManager = () => {
                                   }
                                   className="flex items-center gap-2 bg-emerald-600 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
                                 >
-                                  <BadgeDollarSign className="w-4 h-4" /> سداد
-                                  نقدي
+                                  <ArrowDownToLine className="w-4 h-4" /> تحصيل
+                                  دفعة
                                 </button>
                                 <button
                                   onClick={() =>
@@ -763,8 +883,8 @@ const MerchantsManager = () => {
                                 <p
                                   className={`text-xs font-bold mb-1 flex items-center gap-1 ${statementData?.merchant_info?.current_calculated_balance > 0 ? 'text-rose-600' : statementData?.merchant_info?.current_calculated_balance < 0 ? 'text-emerald-600' : 'text-slate-500'}`}
                                 >
-                                  <Wallet className="w-4 h-4" /> الرصيد الدفتري
-                                  الحالي
+                                  <Wallet className="w-4 h-4" /> الرصيد
+                                  (المديونية)
                                 </p>
                                 <p
                                   className={`text-xl font-black ${statementData?.merchant_info?.current_calculated_balance > 0 ? 'text-rose-700 dark:text-rose-400' : statementData?.merchant_info?.current_calculated_balance < 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white'}`}
@@ -778,10 +898,10 @@ const MerchantsManager = () => {
                                     (
                                     {statementData?.merchant_info
                                       ?.current_calculated_balance > 0
-                                      ? 'مديونية عليه'
+                                      ? 'عليه'
                                       : statementData?.merchant_info
                                             ?.current_calculated_balance < 0
-                                        ? 'دائن له'
+                                        ? 'له'
                                         : 'مُصفى'}
                                     )
                                   </span>
@@ -790,7 +910,7 @@ const MerchantsManager = () => {
                               <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/50">
                                 <p className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 flex items-center gap-1">
                                   <Package className="w-4 h-4" /> إجمالي
-                                  المسحوبات (أطباق)
+                                  المسحوبات
                                 </p>
                                 <p className="text-xl font-black text-slate-800 dark:text-white">
                                   {(
@@ -825,23 +945,19 @@ const MerchantsManager = () => {
                                     <div className="flex justify-between items-start">
                                       <div className="flex items-start gap-3">
                                         <div
-                                          className={`p-2 rounded-lg ${item._recordType === 'INVOICE' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30' : item.type === 'IN' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30'}`}
+                                          className={`p-2 rounded-lg ${item._recordType === 'INVOICE' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30'}`}
                                         >
                                           {item._recordType === 'INVOICE' ? (
                                             <Receipt className="w-5 h-5" />
-                                          ) : item.type === 'IN' ? (
-                                            <ArrowDownToLine className="w-5 h-5" />
                                           ) : (
-                                            <ArrowUpFromLine className="w-5 h-5" />
+                                            <ArrowDownToLine className="w-5 h-5" />
                                           )}
                                         </div>
                                         <div>
                                           <h4 className="font-black text-sm text-slate-800 dark:text-white flex items-center gap-2">
                                             {item._recordType === 'INVOICE'
                                               ? 'فاتورة مبيعات'
-                                              : item.type === 'IN'
-                                                ? 'سند تحصيل (قبض)'
-                                                : 'سند صرف'}
+                                              : 'سند تحصيل (قبض)'}
                                             <span
                                               className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded font-black text-slate-500"
                                               dir="ltr"
@@ -856,13 +972,13 @@ const MerchantsManager = () => {
                                             {item.notes ||
                                               (item._recordType === 'INVOICE'
                                                 ? 'بضاعة مباعة'
-                                                : 'سداد نقدي')}
+                                                : 'سداد نقدي من العميل')}
                                           </p>
                                         </div>
                                       </div>
                                       <div className="text-left">
                                         <p
-                                          className={`font-black text-sm ${item._recordType === 'INVOICE' ? 'text-slate-800 dark:text-white' : item.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}
+                                          className={`font-black text-sm ${item._recordType === 'INVOICE' ? 'text-slate-800 dark:text-white' : 'text-emerald-600'}`}
                                         >
                                           {item._recordType === 'INVOICE'
                                             ? Number(
@@ -925,7 +1041,7 @@ const MerchantsManager = () => {
                       </div>
                     )}
 
-                  {/* === فورم إصدار فاتورة (مدمجة من Sales) === */}
+                  {/* === فورم إصدار فاتورة === */}
                   {sheetConfig.mode === 'ADD_SALE' && (
                     <form onSubmit={handleSaleSubmit} className="space-y-4">
                       <div className="bg-indigo-50 dark:bg-indigo-900/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
@@ -964,7 +1080,7 @@ const MerchantsManager = () => {
 
                       <div>
                         <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                          تحديد الدورة (مصدر البضاعة) *
+                          تحديد الدورة / العنبر (مصدر البضاعة) *
                         </label>
                         <select
                           value={saleData.cycle_id}
@@ -977,20 +1093,23 @@ const MerchantsManager = () => {
                           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                           required
                         >
-                          <option value="">-- بيع عام (بدون دورة) --</option>
+                          <option value="" disabled>
+                            -- اختر الدورة / العنبر --
+                          </option>
                           {cycles
                             .filter((c) => c.status !== 'CLOSED')
                             .map((c) => (
                               <option key={c._id} value={c._id}>
-                                {c.name} (
-                                {c.type === 'LAYER' ? 'بياض' : 'تسمين'})
+                                {c.name} - {c.barn_id?.name || 'عنبر غير محدد'}{' '}
+                                ({c.type === 'LAYER' ? 'بياض' : 'تسمين'})
                               </option>
                             ))}
                         </select>
                       </div>
 
+                      {/* 🚀 إزالة البيض من خيارات المالك */}
                       <div className="grid grid-cols-2 gap-2 mb-2">
-                        {['BIRDS', 'MANURE', 'EGGS'].map((type) => (
+                        {['BIRDS', 'MANURE'].map((type) => (
                           <button
                             key={type}
                             type="button"
@@ -998,9 +1117,6 @@ const MerchantsManager = () => {
                               setSaleData((p) => ({
                                 ...p,
                                 sale_category: type,
-                                merchant_id: sheetConfig.activeMerchant
-                                  ? p.merchant_id
-                                  : '',
                                 quantity: '',
                                 total_weight_kg: '',
                                 unit_price: '',
@@ -1008,11 +1124,7 @@ const MerchantsManager = () => {
                             }
                             className={`py-2 px-1 text-[11px] font-bold rounded-lg border transition-all ${saleData.sale_category === type ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}
                           >
-                            {type === 'BIRDS'
-                              ? 'طيور'
-                              : type === 'EGGS'
-                                ? 'بيض'
-                                : 'سباخ/سماد'}
+                            {type === 'BIRDS' ? 'طيور' : 'سباخ/سماد'}
                           </button>
                         ))}
                       </div>
@@ -1022,9 +1134,7 @@ const MerchantsManager = () => {
                           <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
                             {saleData.sale_category === 'BIRDS'
                               ? 'العدد (طائر) *'
-                              : saleData.sale_category === 'EGGS'
-                                ? 'العدد (طبق) *'
-                                : 'الكمية (نقلة) *'}
+                              : 'الكمية (نقلة) *'}
                           </label>
                           <input
                             type="number"
@@ -1132,6 +1242,55 @@ const MerchantsManager = () => {
                         </div>
                       </div>
 
+                      {/* 🚀 Live Calculation Box */}
+                      <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex justify-between items-center mt-2">
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-500">
+                            إجمالي الفاتورة
+                          </p>
+                          <p className="text-sm font-black text-slate-800 dark:text-white">
+                            {calculatedTotal.toLocaleString()} ج.م
+                          </p>
+                        </div>
+                        <div className="text-left">
+                          <p className="text-[10px] font-bold text-slate-500">
+                            الباقي (يُضاف للمديونية)
+                          </p>
+                          <p
+                            className={`text-sm font-black ${calculatedRemaining > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                          >
+                            {calculatedRemaining.toLocaleString()} ج.م
+                          </p>
+                        </div>
+                      </div>
+
+                      {saleData.merchant_id && (
+                        <div className="mt-2">
+                          <label className="mb-1.5 block text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                            المندوب المستلم (اختياري)
+                          </label>
+                          <select
+                            value={saleData.rep_name}
+                            onChange={(e) =>
+                              setSaleData((p) => ({
+                                ...p,
+                                rep_name: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          >
+                            <option value="">-- اختر المندوب --</option>
+                            {merchants
+                              .find((m) => m._id === saleData.merchant_id)
+                              ?.representatives?.map((rep) => (
+                                <option key={rep._id} value={rep.name}>
+                                  {rep.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+
                       <button
                         type="submit"
                         disabled={isActionLoading}
@@ -1151,7 +1310,7 @@ const MerchantsManager = () => {
                     <form onSubmit={handlePaymentSubmit} className="space-y-4">
                       <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-4 rounded-xl mb-4 text-center">
                         <p className="text-xs font-bold text-amber-700 dark:text-amber-500 mb-1">
-                          الرصيد الدفتري الحالي
+                          المديونية الحالية (عليه)
                         </p>
                         <p className="text-xl font-black text-amber-800 dark:text-amber-400">
                           {Math.abs(
@@ -1163,26 +1322,20 @@ const MerchantsManager = () => {
 
                       <div>
                         <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                          نوع الحركة المالي *
+                          نوع التحصيل *
                         </label>
                         <select
+                          disabled
                           value={paymentData.type}
-                          onChange={(e) =>
-                            setPaymentData((p) => ({
-                              ...p,
-                              type: e.target.value,
-                            }))
-                          }
-                          className={`w-full rounded-xl border-2 px-3 py-3 text-sm font-black outline-none transition-colors ${paymentData.type === 'IN' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}
+                          className="w-full rounded-xl border-2 px-3 py-3 text-sm font-black outline-none transition-colors border-emerald-200 bg-emerald-50 text-emerald-700 opacity-80"
                         >
                           <option value="IN">قبض نقدي من الشركة (IN)</option>
-                          <option value="OUT">صرف نقدي للشركة (OUT)</option>
                         </select>
                       </div>
 
                       <div>
                         <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                          المبلغ (ج.م) *
+                          المبلغ المُحصل (ج.م) *
                         </label>
                         <input
                           type="number"
@@ -1226,11 +1379,126 @@ const MerchantsManager = () => {
                         {isActionLoading ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
-                          'تأكيد العملية وتحديث الخزينة'
+                          'تأكيد التحصيل وتحديث الخزينة'
                         )}
                       </button>
                     </form>
                   )}
+
+                  {/* 🚀 === فورم إدارة المناديب (REPS) === */}
+                  {sheetConfig.mode === 'REPS' &&
+                    sheetConfig.activeMerchant && (
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-3">
+                          المناديب المسجلين
+                        </h4>
+                        <div className="space-y-2 mb-6">
+                          {sheetConfig.activeMerchant.representatives?.map(
+                            (rep) => (
+                              <div
+                                key={rep._id}
+                                className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800"
+                              >
+                                <div>
+                                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                    {rep.name}
+                                  </p>
+                                  <p
+                                    className="text-xs text-slate-500"
+                                    dir="ltr"
+                                  >
+                                    {rep.phone || 'بدون رقم'}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveRep(rep._id)}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-lg"
+                                >
+                                  <UserMinus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )
+                          )}
+                          {sheetConfig.activeMerchant.representatives
+                            ?.length === 0 && (
+                            <p className="text-center text-xs text-slate-500">
+                              لا يوجد مناديب مسجلين
+                            </p>
+                          )}
+                        </div>
+
+                        <h4 className="font-bold text-sm text-slate-800 dark:text-white mb-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                          إضافة مندوب جديد
+                        </h4>
+                        <form onSubmit={handleAddRep} className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="اسم المندوب *"
+                            value={repFormData.name}
+                            onChange={(e) =>
+                              setRepFormData((p) => ({
+                                ...p,
+                                name: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                            required
+                          />
+                          <input
+                            type="tel"
+                            dir="ltr"
+                            placeholder="رقم هاتف المندوب"
+                            value={repFormData.phone}
+                            onChange={(e) =>
+                              setRepFormData((p) => ({
+                                ...p,
+                                phone: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          />
+                          <button
+                            type="submit"
+                            disabled={isActionLoading}
+                            className="w-full flex justify-center items-center rounded-xl bg-slate-900 dark:bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-70 gap-2"
+                          >
+                            {isActionLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <UserPlus className="w-4 h-4" /> إضافة للمنظومة
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      </div>
+                    )}
+
+                  {/* === خيارات التاجر === */}
+                  {sheetConfig.mode === 'OPTIONS' &&
+                    sheetConfig.activeMerchant && (
+                      <div className="space-y-3">
+                        <button
+                          onClick={() =>
+                            setSheetConfig({
+                              ...sheetConfig,
+                              mode: 'EDIT_MERCHANT',
+                            })
+                          }
+                          className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 font-bold text-sm transition-colors"
+                        >
+                          <Settings2 className="w-5 h-5" /> تعديل بيانات الشركة
+                        </button>
+                        <button
+                          onClick={() =>
+                            openRepsSheet(sheetConfig.activeMerchant)
+                          }
+                          className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:text-slate-300 font-bold text-sm"
+                        >
+                          <Users className="w-5 h-5" /> إدارة المناديب المعتمدين
+                        </button>
+                      </div>
+                    )}
 
                   {/* === فورم إضافة / تعديل شركة === */}
                   {(sheetConfig.mode === 'ADD_MERCHANT' ||
