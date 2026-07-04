@@ -22,7 +22,7 @@ import toast from 'react-hot-toast';
 import { requestForToken, onMessageListener } from '../../firebase';
 
 const NotificationBell = () => {
-  const { socket } = useContext(AuthContext);
+  const { socket, user } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -99,9 +99,13 @@ const NotificationBell = () => {
 
   // 2. الاستماع اللحظي للـ Socket
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user) return;
 
     const handleNewNotification = (newNotif) => {
+      if (newNotif.target_role && newNotif.target_role !== user.role) {
+        return;
+      }
+
       setNotifications((prev) => [newNotif, ...prev]);
       setUnreadCount((prev) => prev + 1);
 
@@ -124,7 +128,6 @@ const NotificationBell = () => {
         { duration: 4000 }
       );
       if ('Notification' in window && Notification.permission === 'granted') {
-        // 🚀 استخدام الرابط الكامل للصورة هنا لمنع كراش الأندرويد
         new Notification(newNotif.title, {
           body: newNotif.message,
           icon: `${BASE_URL}/pwa-192x192.png`,
@@ -136,7 +139,7 @@ const NotificationBell = () => {
     socket.on('new_notification', handleNewNotification);
 
     return () => socket.off('new_notification', handleNewNotification);
-  }, [socket]);
+  }, [socket, user]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
