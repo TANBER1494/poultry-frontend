@@ -43,25 +43,29 @@ const InventoryManager = () => {
     activeItem: null,
   });
 
-  const [itemFormData, setItemFormData] = useState({
+  const [itemData, setItemData] = useState({
     name: '',
     category: 'FEED',
     unit: 'BAG',
     min_alert_level: '',
-    average_unit_cost: '',
   });
 
-  const [movementFormData, setMovementFormData] = useState({
-    movement_type: 'PURCHASE',
+  const [movementData, setMovementData] = useState({
+    type: 'PURCHASE',
     quantity: '',
-    unit_cost_at_time: '',
-    movement_date: new Date().toISOString().split('T')[0],
-    reference_doc: '',
+    unit_cost: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+
+  const [custodyData, setCustodyData] = useState({
+    cycle_id: '',
+    quantity: '',
+    date: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
     let isMounted = true;
-    const initializeData = async () => {
+    const initialize = async () => {
       try {
         setIsLoading(true);
         const farmsRes = await farmService.getFarms();
@@ -69,12 +73,12 @@ const InventoryManager = () => {
         if (isMounted) setFarms(fetchedFarms);
 
         if (fetchedFarms.length > 0) {
-          const firstFarm = fetchedFarms[0];
+          const firstFarm = fetchedFarms[0]._id;
           if (isMounted) {
-            setSelectedFarmId(firstFarm._id);
-            setFarmName(firstFarm.name);
+            setSelectedFarmId(firstFarm);
+            setFarmName(fetchedFarms[0].name);
           }
-          await fetchFarmData(firstFarm._id, isMounted);
+          await loadFarmData(firstFarm, isMounted);
         } else {
           if (isMounted) setIsLoading(false);
         }
@@ -83,15 +87,14 @@ const InventoryManager = () => {
         if (isMounted) setIsLoading(false);
       }
     };
-    initializeData();
+    initialize();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const fetchFarmData = async (farmId, isMounted = true) => {
+  const loadFarmData = async (farmId, isMounted = true) => {
     try {
-      setIsLoading(true);
       const [itemsRes, cyclesRes] = await Promise.all([
         inventoryService.getInventoryItems(farmId),
         cycleService.getFarmCycles(farmId),
@@ -110,16 +113,113 @@ const InventoryManager = () => {
   const handleFarmChange = async (e) => {
     const newFarmId = e.target.value;
     setSelectedFarmId(newFarmId);
-    const selectedFarm = farms.find((f) => f._id === newFarmId);
-    if (selectedFarm) setFarmName(selectedFarm.name);
-    await fetchFarmData(newFarmId);
+    const selected = farms.find((f) => f._id === newFarmId);
+    if (selected) setFarmName(selected.name);
+    setIsLoading(true);
+    await loadFarmData(newFarmId);
   };
 
-  const closeSheet = () =>
+  const closeSheet = () => {
     setSheetConfig({ isOpen: false, mode: 'ADD_ITEM', activeItem: null });
+    setItemLedger([]);
+  };
+
+  // ===================== Handlers =====================
+
+  const handleItemSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsActionLoading(true);
+      const payload = { ...itemData, farm_id: selectedFarmId };
+      if (sheetConfig.mode === 'ADD_ITEM') {
+        await inventoryService.addInventoryItem(payload);
+        showAlert.success('تم', 'تمت إضافة الصنف بنجاح');
+      } else {
+        await inventoryService.updateInventoryItem(
+          sheetConfig.activeItem._id,
+          payload
+        );
+        showAlert.success('تم', 'تم تحديث بيانات الصنف');
+      }
+      closeSheet();
+      loadFarmData(selectedFarmId);
+    } catch (error) {
+      showAlert.error('خطأ', error.response?.data?.message || 'فشل الحفظ');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleMovementSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsActionLoading(true);
+      const payload = {
+        local_id: `MOV_${Date.now()}`,
+        farm_id: selectedFarmId,
+        item_id: sheetConfig.activeItem._id,
+        movement_type: movementData.type,
+        quantity: movementData.quantity,
+        unit_cost_at_time: movementData.unit_cost,
+        movement_date: movementData.date,
+        status: 'PENDING' // 🚀 الحقن الصامت: إجبار التوريد ليكون في الطريق ليطلق الإشعار للمشرف
+      };
+      const res = await inventoryService.recordMovement(payload);
+      showAlert.success('تم الإرسال', 'تم تسجيل التوريد في الطريق بانتظار تأكيد المشرف');
+      closeSheet();
+      loadFarmData(selectedFarmId);
+    } catch (error) {
+      showAlert.error('خطأ', error.response?.data?.message || 'فشل التسجيل');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCustodySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsActionLoading(true);
+      const payload = {
+        local_id: `TRANS_${Date.now()}`,
+        farm_id: selectedFarmId,
+        item_id: sheetConfig.activeItem._id,
+        cycle_id: custodyData.cycle_id,
+        quantity: custodyData.quantity,
+      };
+      await inventoryService.transferToBarn(payload);
+      showAlert.success('تم الصرف', 'تم صرف العهدة للعنبر بنجاح وتحديث الرصيد');
+      closeSheet();
+      loadFarmData(selectedFarmId);
+    } catch (error) {
+      showAlert.error('خطأ', error.response?.data?.message || 'فشل الصرف');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteItem = async (item) => {
+    if (!window.confirm(`هل أنت متأكد من أرشفة/حذف (${item.name})؟`)) return;
+    try {
+      setIsActionLoading(true);
+      // 🚀 إصلاح الحذف: تمرير selectedFarmId لتجاوز الحماية
+      await inventoryService.deleteInventoryItem(item._id, selectedFarmId);
+      showAlert.success('تم الحذف', 'تم أرشفة الصنف بنجاح');
+      closeSheet();
+      loadFarmData(selectedFarmId);
+    } catch (error) {
+      showAlert.error(
+        'فشل العملية',
+        error.response?.data?.message || 'لا يمكن حذف الصنف'
+      );
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // ===================== Open Modals =====================
 
   const openAddItem = () => {
-    setItemFormData({
+    setItemData({
       name: '',
       category: 'FEED',
       unit: 'BAG',
@@ -128,8 +228,12 @@ const InventoryManager = () => {
     setSheetConfig({ isOpen: true, mode: 'ADD_ITEM', activeItem: null });
   };
 
-  const openEditSheet = (item) => {
-    setItemFormData({
+  const openOptions = (item) => {
+    setSheetConfig({ isOpen: true, mode: 'OPTIONS', activeItem: item });
+  };
+
+  const openEditItem = (item) => {
+    setItemData({
       name: item.name,
       category: item.category,
       unit: item.unit,
@@ -139,26 +243,13 @@ const InventoryManager = () => {
   };
 
   const openMovement = (item) => {
-    setMovementFormData({
-      movement_type: 'PURCHASE',
+    setMovementData({
+      type: 'PURCHASE',
       quantity: '',
-      unit_cost_at_time: '',
-      movement_date: new Date().toISOString().split('T')[0],
-      reference_doc: '',
+      unit_cost: item.average_unit_cost || '',
+      date: new Date().toISOString().split('T')[0],
     });
     setSheetConfig({ isOpen: true, mode: 'MOVEMENT', activeItem: item });
-  };
-
-  const openCustody = (item) => {
-    setSheetConfig({ isOpen: true, mode: 'CUSTODY', activeItem: item });
-  };
-
-  const openUpdatePrice = (item) => {
-    setItemFormData((prev) => ({
-      ...prev,
-      average_unit_cost: item.average_unit_cost,
-    }));
-    setSheetConfig({ isOpen: true, mode: 'UPDATE_PRICE', activeItem: item });
   };
 
   const openLedger = async (item) => {
@@ -168,179 +259,46 @@ const InventoryManager = () => {
       const res = await inventoryService.getItemMovements(item._id);
       setItemLedger(res.movements || []);
     } catch (error) {
-      showAlert.error('خطأ', 'تعذر جلب حركات الصنف');
+      showAlert.error('خطأ', 'تعذر جلب كشف الحساب');
     } finally {
       setIsLedgerLoading(false);
     }
   };
 
-  const handleItemSubmit = async (e) => {
-    e.preventDefault();
-    if (sheetConfig.mode !== 'UPDATE_PRICE' && !itemFormData.name)
-      return showAlert.error('خطأ', 'اسم الصنف مطلوب');
-
-    try {
-      setIsActionLoading(true);
-      if (sheetConfig.mode === 'ADD_ITEM') {
-        await inventoryService.addInventoryItem({
-          ...itemFormData,
-          farm_id: selectedFarmId,
-        });
-        showAlert.success('نجاح', 'تم إضافة الصنف للمخزن');
-      } else if (sheetConfig.mode === 'UPDATE_PRICE') {
-        await inventoryService.updateInventoryItem(sheetConfig.activeItem._id, {
-          average_unit_cost: itemFormData.average_unit_cost,
-          farm_id: selectedFarmId,
-        });
-        showAlert.success('نجاح', 'تم تحديث سعر السوق للمنتج بنجاح');
-      } else {
-        await inventoryService.updateInventoryItem(sheetConfig.activeItem._id, {
-          ...itemFormData,
-          farm_id: selectedFarmId,
-        });
-        showAlert.success('نجاح', 'تم تحديث بيانات الصنف');
-      }
-      closeSheet();
-      await fetchFarmData(selectedFarmId);
-    } catch (error) {
-      showAlert.error('خطأ', error.response?.data?.message || 'فشل الحفظ');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  const handleDeleteItem = async (item) => {
-    if (!window.confirm(`هل أنت متأكد من أرشفة الصنف (${item.name})؟`)) return;
-    try {
-      setIsActionLoading(true);
-      await inventoryService.deleteInventoryItem(item._id, selectedFarmId);
-      showAlert.success('تم الحذف', 'تم أرشفة الصنف بنجاح');
-      closeSheet();
-      await fetchFarmData(selectedFarmId);
-    } catch (error) {
-      showAlert.error('خطأ', error.response?.data?.message || 'فشل الحذف');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  const handleMovementSubmit = async (e) => {
-    e.preventDefault();
-    if (!movementFormData.quantity)
-      return showAlert.error('خطأ', 'يجب إدخال الكمية');
-    if (
-      !movementFormData.unit_cost_at_time &&
-      movementFormData.movement_type !== 'RETURN'
-    )
-      return showAlert.error('خطأ', 'يجب إدخال السعر للوارد');
-
-    try {
-      setIsActionLoading(true);
-      const payload = {
-        local_id: `MOV-${Date.now()}`,
-        farm_id: selectedFarmId,
-        item_id: sheetConfig.activeItem._id,
-        movement_type: movementFormData.movement_type,
-        quantity: movementFormData.quantity,
-        unit_cost_at_time:
-          movementFormData.unit_cost_at_time ||
-          sheetConfig.activeItem.average_unit_cost,
-        movement_date: movementFormData.movement_date,
-        reference_doc: movementFormData.reference_doc,
-      };
-
-      await inventoryService.recordMovement(payload);
-      showAlert.success('نجاح', 'تم تسجيل الحركة بنجاح');
-      closeSheet();
-      await fetchFarmData(selectedFarmId);
-    } catch (error) {
-      showAlert.error(
-        'إجراء مرفوض',
-        error.response?.data?.message || 'فشل تسجيل الحركة'
-      );
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
-  const getCategoryMeta = (cat) => {
-    const meta = {
-      FEED: {
-        label: 'أعلاف',
-        color: 'bg-amber-100 text-amber-700',
-        icon: <Package className="w-4 h-4" />,
-      },
-      MEDICATION: {
-        label: 'أدوية',
-        color: 'bg-indigo-100 text-indigo-700',
-        icon: <Syringe className="w-4 h-4" />,
-      },
-      VACCINE: {
-        label: 'لقاحات',
-        color: 'bg-rose-100 text-rose-700',
-        icon: <Activity className="w-4 h-4" />,
-      },
-      DISINFECTANT: {
-        label: 'مطهرات',
-        color: 'bg-cyan-100 text-cyan-700',
-        icon: <ShieldAlert className="w-4 h-4" />,
-      },
-      PRODUCT: {
-        label: 'إنتاج تام (منتجات)',
-        color: 'bg-emerald-100 text-emerald-700',
-        icon: <Box className="w-4 h-4" />,
-      },
-      OTHER: {
-        label: 'أخرى',
-        color: 'bg-slate-100 text-slate-700',
-        icon: <Box className="w-4 h-4" />,
-      },
-    };
-    return meta[cat] || meta['OTHER'];
-  };
-
-  const getUnitName = (unit) => {
-    const units = {
-      BAG: 'شيكارة/كيس',
-      TON: 'طن',
-      LITER: 'لتر',
-      BOTTLE: 'عبوة',
-      KG: 'كجم',
-      PIECE: 'قطعة',
-      TRAY: 'طبق/كرتونة',
-    };
-    return units[unit] || unit;
-  };
-
-  // 🛡️ التعديل الثاني: إعادة دالة ترجمة أنواع الحركات المخزنية
-  const getMovementTypeName = (type) => {
-    const types = {
-      PURCHASE: 'مشتريات/وارد',
-      TRANSFER_IN: 'تحويل وارد',
-      PRODUCTION: 'إنتاج تام',
-      RETURN: 'مرتجع للمخزن',
-      CONSUMPTION: 'منصرف/استهلاك',
-      ADJUSTMENT: 'تسوية عجز/هالك',
-      BARN_TRANSFER: 'صرف عهدة للعنبر',
-      SALE: 'مبيعات/منصرف',
-    };
-    return types[type] || type;
-  };
-
+  // ===================== Helpers =====================
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('ar-EG', {
       style: 'currency',
       currency: 'EGP',
     }).format(amount || 0);
 
-  const totalInventoryValue = items.reduce(
-    (acc, item) => acc + item.stock_quantity * item.average_unit_cost,
-    0
-  );
-  const alertsCount = items.filter(
-    (item) =>
-      item.stock_quantity <= item.min_alert_level && item.min_alert_level > 0
-  ).length;
+  const getCategoryIcon = (category) => {
+    switch (category) {
+      case 'FEED':
+        return <Box className="w-5 h-5 text-amber-600" />;
+      case 'MEDICATION':
+        return <Syringe className="w-5 h-5 text-indigo-600" />;
+      case 'VACCINE':
+        return <ShieldAlert className="w-5 h-5 text-rose-600" />;
+      case 'PRODUCT':
+        return <Package className="w-5 h-5 text-emerald-600" />;
+      default:
+        return <Package className="w-5 h-5 text-slate-600" />;
+    }
+  };
+
+  const getUnitName = (unit) => {
+    const units = {
+      BAG: 'شيكارة',
+      TON: 'طن',
+      LITER: 'لتر',
+      BOTTLE: 'زجاجة',
+      KG: 'كجم',
+      PIECE: 'قطعة',
+      TRAY: 'طبق',
+    };
+    return units[unit] || unit;
+  };
 
   const sheetVariants = {
     hidden: { y: '100%', opacity: 0 },
@@ -358,18 +316,20 @@ const InventoryManager = () => {
   };
 
   return (
-    <div className="space-y-6 pb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
+    <div className="space-y-4 pb-10">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Box className="w-6 h-6 text-emerald-500" /> إدارة المخازن الرئيسية
+            <Package className="w-6 h-6 text-indigo-500" /> إدارة المخازن
+            (الرئيسية)
           </h1>
           <p className="text-sm font-bold text-slate-500 mt-1">
-            شراء الأصناف ومراقبة أرصدة العنابر والمنتجات
+            توريد بضاعة للمزارع، وتسعير الأصناف
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
               <Tractor className="h-4 w-4" />
@@ -378,12 +338,11 @@ const InventoryManager = () => {
               value={selectedFarmId}
               onChange={handleFarmChange}
               disabled={isLoading || farms.length === 0}
-              className="appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm font-bold text-slate-700 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              className="w-full sm:w-auto appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
-              {farms.length === 0 && <option value="">لا توجد مزارع</option>}
-              {farms.map((farm) => (
-                <option key={farm._id} value={farm._id}>
-                  {farm.name}
+              {farms.map((f) => (
+                <option key={f._id} value={f._id}>
+                  {f.name}
                 </option>
               ))}
             </select>
@@ -391,227 +350,127 @@ const InventoryManager = () => {
           <button
             onClick={openAddItem}
             disabled={farms.length === 0}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 shadow-sm disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-sm disabled:opacity-50"
           >
-            <Plus className="h-5 w-5" />
-            <span className="hidden sm:inline">صنف جديد</span>
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">تعريف صنف جديد</span>
           </button>
         </div>
       </div>
 
-      {!isLoading && farms.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 rounded-xl">
-              <FileText className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500">
-                إجمالي قيمة الأصول (أعلاف + منتجات)
-              </p>
-              <h3 className="text-xl font-black text-slate-800 dark:text-white mt-0.5">
-                {formatCurrency(totalInventoryValue)}
-              </h3>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400 rounded-xl">
-              <Box className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500">
-                الأصناف المعرفة بالمخزن
-              </p>
-              <h3 className="text-xl font-black text-slate-800 dark:text-white mt-0.5">
-                {items.length} صنف
-              </h3>
-            </div>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-            <div
-              className={`p-3 rounded-xl ${alertsCount > 0 ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400' : 'bg-slate-50 text-slate-400 dark:bg-slate-800'}`}
-            >
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slate-500">
-                نواقص تتطلب الشراء
-              </p>
-              <h3
-                className={`text-xl font-black mt-0.5 ${alertsCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white'}`}
-              >
-                {alertsCount} تنبيه
-              </h3>
-            </div>
-          </div>
-        </div>
-      )}
-
       {isLoading ? (
         <div className="flex h-64 items-center justify-center">
-          <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
+          <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
-          <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800/50">
-            <Package className="h-10 w-10 text-slate-400 dark:text-slate-500" />
-          </div>
+          <Package className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-lg font-black text-slate-800 dark:text-white">
-            المخزن فارغ حالياً
+            المخزن فارغ
           </h3>
-          <p className="mt-2 text-sm font-medium text-slate-500 max-w-sm">
-            قم بتعريف الأصناف لتتمكن من إدخال المشتريات ومراقبة أرصدة العنابر.
+          <p className="mt-2 text-sm font-medium text-slate-500">
+            قم بتعريف الأصناف (علف، أدوية، مطهرات) لتبدأ في التوريد والمتابعة.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.map((item) => {
-            const meta = getCategoryMeta(item.category);
-            const isLowStock =
-              item.stock_quantity <= item.min_alert_level &&
-              item.min_alert_level > 0;
-            const isProduct = item.category === 'PRODUCT';
-
+            const isLowStock = item.stock_quantity <= item.min_alert_level;
             return (
               <motion.div
                 key={item._id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`rounded-2xl border bg-white p-5 shadow-sm transition-shadow dark:bg-slate-900 flex flex-col justify-between ${isLowStock ? 'border-rose-200 dark:border-rose-900/50' : 'border-slate-100 dark:border-slate-800'}`}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={`bg-white dark:bg-slate-900 rounded-2xl border ${
+                  isLowStock
+                    ? 'border-rose-200 dark:border-rose-900/50 shadow-rose-100 dark:shadow-none'
+                    : 'border-slate-200 dark:border-slate-800'
+                } p-4 shadow-sm flex flex-col h-full hover:shadow-md transition-shadow`}
               >
-                <div>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex gap-3">
-                      <div
-                        className={`p-2.5 rounded-xl ${meta.color} flex items-center justify-center`}
-                      >
-                        {meta.icon}
-                      </div>
-                      <div>
-                        <h3 className="font-black text-slate-800 dark:text-white leading-tight">
-                          {item.name}
-                        </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                            {meta.label}
-                          </span>
-                          {isLowStock && (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-700 dark:bg-rose-900/30 animate-pulse">
-                              رصيد منخفض
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+                      {getCategoryIcon(item.category)}
                     </div>
-                    {!isProduct && (
-                      <button
-                        onClick={() =>
-                          setSheetConfig({
-                            isOpen: true,
-                            mode: 'OPTIONS',
-                            activeItem: item,
-                          })
-                        }
-                        className="p-1 rounded-lg text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    <div>
+                      <h3
+                        className="font-black text-slate-800 dark:text-white text-base leading-tight truncate max-w-[150px]"
+                        title={item.name}
                       >
-                        <MoreVertical className="w-5 h-5" />
-                      </button>
-                    )}
+                        {item.name}
+                      </h3>
+                      <p className="text-[10px] font-bold text-slate-500">
+                        {item.category === 'PRODUCT'
+                          ? 'منتج تام'
+                          : 'مستلزمات إنتاج'}
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => openOptions(item)}
+                    className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    <div
-                      className={`p-3 rounded-xl ${isProduct ? 'bg-emerald-50 dark:bg-emerald-900/10' : 'bg-slate-50 dark:bg-slate-800/50'}`}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div
+                    className={`p-3 rounded-xl border ${
+                      isLowStock
+                        ? 'bg-rose-50 border-rose-100 dark:bg-rose-900/20 dark:border-rose-900/30'
+                        : 'bg-slate-50 border-slate-100 dark:bg-slate-800/50 dark:border-slate-700'
+                    }`}
+                  >
+                    <p
+                      className={`text-[10px] font-bold flex items-center gap-1 ${
+                        isLowStock
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-slate-500'
+                      }`}
                     >
-                      <p className="text-[10px] font-bold text-slate-500 mb-1">
-                        الرصيد في المخزن الرئيسي
-                      </p>
-                      <p
-                        className={`text-lg font-black ${isLowStock ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white'}`}
-                      >
-                        {item.stock_quantity.toLocaleString()}{' '}
-                        <span className="text-xs font-bold text-slate-400">
-                          {getUnitName(item.unit)}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl">
-                      {isProduct ? (
-                        <>
-                          <p className="text-[10px] font-bold text-slate-500 mb-1">
-                            سعر السوق الحالي (للوحدة)
-                          </p>
-                          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                            {item.average_unit_cost.toLocaleString()}{' '}
-                            <span className="text-xs font-bold text-emerald-400/70">
-                              ج.م
-                            </span>
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-[10px] font-bold text-slate-500 mb-1">
-                            متوسط التكلفة للوحدة
-                          </p>
-                          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                            {item.average_unit_cost.toLocaleString()}{' '}
-                            <span className="text-xs font-bold text-emerald-400/70">
-                              ج.م
-                            </span>
-                          </p>
-                        </>
-                      )}
-                    </div>
+                      {isLowStock && <AlertCircle className="w-3 h-3" />} الرصيد
+                      الحالي
+                    </p>
+                    <p
+                      className={`text-xl font-black ${
+                        isLowStock
+                          ? 'text-rose-700 dark:text-rose-300'
+                          : 'text-slate-800 dark:text-white'
+                      }`}
+                    >
+                      {item.stock_quantity}{' '}
+                      <span className="text-[10px] font-bold">
+                        {getUnitName(item.unit)}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl border border-slate-100 bg-slate-50 dark:bg-slate-800/50 dark:border-slate-700">
+                    <p className="text-[10px] font-bold text-slate-500 mb-1">
+                      متوسط التكلفة
+                    </p>
+                    <p className="text-sm font-black text-slate-800 dark:text-white">
+                      {item.average_unit_cost > 0
+                        ? formatCurrency(item.average_unit_cost)
+                        : '---'}
+                    </p>
                   </div>
                 </div>
 
-                {!isProduct ? (
-                  <div className="grid grid-cols-3 gap-1.5 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      onClick={() => openMovement(item)}
-                      className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 font-bold transition-colors"
-                    >
-                      <ArrowDownToLine className="w-4 h-4 mb-1" />{' '}
-                      <span className="text-[10px]">شراء وارد</span>
-                    </button>
-                    <button
-                      onClick={() => openCustody(item)}
-                      className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400 font-bold transition-colors"
-                    >
-                      <Eye className="w-4 h-4 mb-1" />{' '}
-                      <span className="text-[10px]">عُهد العنابر</span>
-                    </button>
-                    <button
-                      onClick={() => openLedger(item)}
-                      className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 font-bold transition-colors"
-                    >
-                      <FileText className="w-4 h-4 mb-1" />{' '}
-                      <span className="text-[10px]">كشف الصنف</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      onClick={() => openUpdatePrice(item)}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 font-bold text-xs transition-colors"
-                    >
-                      <DollarSign className="w-4 h-4" /> تحديث سعر السوق
-                    </button>
-                    <button
-                      onClick={() => openLedger(item)}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 font-bold text-xs transition-colors"
-                    >
-                      <FileText className="w-4 h-4" /> سجل الإنتاج
-                    </button>
-                  </div>
-                )}
+                <div className="grid grid-cols-1 mt-auto border-t border-slate-100 dark:border-slate-800 pt-3">
+                  <button
+                    onClick={() => openMovement(item)}
+                    className="flex justify-center items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 dark:text-emerald-400 py-2 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    <ArrowDownToLine className="w-4 h-4" /> توريد بضاعة للمزرعة
+                  </button>
+                </div>
               </motion.div>
             );
           })}
         </div>
       )}
 
-      {/* Modal / Bottom Sheet */}
       <AnimatePresence>
         {sheetConfig.isOpen && (
           <>
@@ -621,7 +480,7 @@ const InventoryManager = () => {
               animate="visible"
               exit="hidden"
               onClick={closeSheet}
-              className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm"
+              className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm"
             />
             <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4">
               <motion.div
@@ -629,21 +488,27 @@ const InventoryManager = () => {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[90dvh]"
+                className={`w-full bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[90dvh] ${
+                  sheetConfig.mode === 'LEDGER' ? 'max-w-4xl' : 'max-w-xl'
+                }`}
               >
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                  <h3 className="text-base font-black text-slate-800 dark:text-white">
-                    {sheetConfig.mode === 'ADD_ITEM' && 'تعريف صنف مخزني جديد'}
+                  <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                    {sheetConfig.mode === 'ADD_ITEM' && 'تعريف صنف جديد'}
                     {sheetConfig.mode === 'EDIT_ITEM' && 'تعديل بيانات الصنف'}
-                    {sheetConfig.mode === 'OPTIONS' && 'خيارات الصنف الإضافية'}
-                    {sheetConfig.mode === 'UPDATE_PRICE' &&
-                      `تسعير المنتج: ${sheetConfig.activeItem?.name}`}
-                    {sheetConfig.mode === 'MOVEMENT' &&
-                      `شراء وارد: ${sheetConfig.activeItem?.name}`}
-                    {sheetConfig.mode === 'CUSTODY' &&
-                      `أرصدة العنابر: ${sheetConfig.activeItem?.name}`}
-                    {sheetConfig.mode === 'LEDGER' &&
-                      `كشف حركات: ${sheetConfig.activeItem?.name}`}
+                    {sheetConfig.mode === 'OPTIONS' && 'خيارات الصنف'}
+                    {sheetConfig.mode === 'MOVEMENT' && (
+                      <>
+                        <ArrowDownToLine className="w-5 h-5 text-emerald-500" />{' '}
+                        توريد بضاعة للمزرعة
+                      </>
+                    )}
+                    {sheetConfig.mode === 'LEDGER' && (
+                      <>
+                        <FileText className="w-5 h-5 text-indigo-500" /> كشف
+                        حساب (حركة الصنف)
+                      </>
+                    )}
                   </h3>
                   <button
                     onClick={closeSheet}
@@ -654,449 +519,297 @@ const InventoryManager = () => {
                 </div>
 
                 <div className="p-6 overflow-y-auto custom-scrollbar">
-                  {/* OPTIONS (فقط للأصناف العادية) */}
+                  {/* الخيارات الإضافية للصنف */}
                   {sheetConfig.mode === 'OPTIONS' && sheetConfig.activeItem && (
                     <div className="space-y-3">
                       <button
-                        onClick={() => openEditSheet(sheetConfig.activeItem)}
-                        className="w-full flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 text-slate-700 dark:text-slate-300 font-bold text-sm transition-colors"
+                        onClick={() => openLedger(sheetConfig.activeItem)}
+                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:text-slate-300 hover:text-indigo-600 font-bold text-sm transition-colors"
                       >
-                        <Settings2 className="w-5 h-5" /> تعديل إعدادات وتنبيهات
-                        الصنف
+                        <FileText className="w-5 h-5" /> كشف حركات الصنف
+                        (الاستاذ)
+                      </button>
+                      <button
+                        onClick={() => openEditItem(sheetConfig.activeItem)}
+                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 font-bold text-sm transition-colors"
+                      >
+                        <Settings2 className="w-5 h-5" /> تعديل إعدادات الصنف
                       </button>
                       <button
                         onClick={() => handleDeleteItem(sheetConfig.activeItem)}
-                        className="w-full flex items-center gap-3 p-4 rounded-xl bg-rose-50 dark:bg-rose-900/10 text-rose-600 font-bold text-sm transition-colors"
+                        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/10 hover:bg-rose-100 dark:hover:bg-rose-900/30 text-rose-600 dark:text-rose-400 font-bold text-sm transition-colors border border-rose-100 dark:border-rose-900/30"
                       >
-                        <Trash2 className="w-5 h-5" /> أرشفة الصنف (إخفاء من
-                        القائمة)
+                        <Trash2 className="w-5 h-5" /> أرشفة الصنف
                       </button>
                     </div>
                   )}
 
-                  {sheetConfig.mode === 'UPDATE_PRICE' &&
-                    sheetConfig.activeItem && (
-                      <form onSubmit={handleItemSubmit} className="space-y-4">
-                        <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30 mb-2">
-                          <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                            تحديث سعر السوق سيؤدي إلى إعادة تقييم المخزون الحالي
-                            من هذا المنتج لتوضيح قيمة أصولك.
-                          </p>
-                        </div>
-                        <div>
-                          <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                            سعر السوق الحالي لـ (
-                            {getUnitName(sheetConfig.activeItem.unit)}) *
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={itemFormData.average_unit_cost}
-                            onChange={(e) =>
-                              setItemFormData((p) => ({
-                                ...p,
-                                average_unit_cost: e.target.value,
-                              }))
-                            }
-                            placeholder="ج.م"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-lg font-black outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                            required
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={isActionLoading}
-                          className="mt-6 w-full flex justify-center items-center rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-70"
-                        >
-                          {isActionLoading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            'حفظ وتسعير المخزون'
-                          )}
-                        </button>
-                      </form>
-                    )}
-
-                  {/* ADD/EDIT ITEM */}
+                  {/* إضافة / تعديل صنف */}
                   {(sheetConfig.mode === 'ADD_ITEM' ||
                     sheetConfig.mode === 'EDIT_ITEM') && (
                     <form onSubmit={handleItemSubmit} className="space-y-4">
                       <div>
-                        <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                          اسم الصنف (واضح ومميز) *
+                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                          اسم الصنف *
                         </label>
                         <input
                           type="text"
-                          value={itemFormData.name}
+                          value={itemData.name}
                           onChange={(e) =>
-                            setItemFormData((p) => ({
-                              ...p,
-                              name: e.target.value,
-                            }))
+                            setItemData((p) => ({ ...p, name: e.target.value }))
                           }
-                          placeholder="مثال: علف بادي نامي 23%"
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          placeholder="مثال: علف بادي نامي 21%"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                           required
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                            تصنيف الصنف *
+                          <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                            التصنيف *
                           </label>
                           <select
-                            value={itemFormData.category}
+                            value={itemData.category}
                             onChange={(e) =>
-                              setItemFormData((p) => ({
+                              setItemData((p) => ({
                                 ...p,
                                 category: e.target.value,
                               }))
                             }
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                             required
                           >
-                            <option value="FEED">أعلاف</option>
-                            <option value="MEDICATION">أدوية</option>
-                            <option value="VACCINE">لقاحات وتحصين</option>
+                            <option value="FEED">علف</option>
+                            <option value="MEDICATION">دواء / علاج</option>
+                            <option value="VACCINE">تحصين / لقاح</option>
                             <option value="DISINFECTANT">مطهرات</option>
+                            <option value="PRODUCT">منتج تام</option>
+                            <option value="OTHER">أخرى</option>
                           </select>
                         </div>
                         <div>
-                          <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                            وحدة القياس *
+                          <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                            الوحدة *
                           </label>
                           <select
-                            value={itemFormData.unit}
+                            value={itemData.unit}
                             onChange={(e) =>
-                              setItemFormData((p) => ({
+                              setItemData((p) => ({
                                 ...p,
                                 unit: e.target.value,
                               }))
                             }
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                             required
                           >
-                            <option value="BAG">شيكارة/كيس</option>
+                            <option value="BAG">شيكارة</option>
                             <option value="TON">طن</option>
-                            <option value="KG">كجم</option>
                             <option value="LITER">لتر</option>
-                            <option value="BOTTLE">زجاجة/عبوة</option>
+                            <option value="BOTTLE">زجاجة</option>
+                            <option value="KG">كجم</option>
                             <option value="PIECE">قطعة</option>
+                            <option value="TRAY">طبق / كرتونة</option>
                           </select>
                         </div>
                       </div>
                       <div>
-                        <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                          تنبيه النواقص (عند وصول الرصيد إلى)
+                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                          الحد الأدنى للتنبيه بنقص الرصيد
                         </label>
                         <input
                           type="number"
                           min="0"
-                          value={itemFormData.min_alert_level}
+                          value={itemData.min_alert_level}
                           onChange={(e) =>
-                            setItemFormData((p) => ({
+                            setItemData((p) => ({
                               ...p,
                               min_alert_level: e.target.value,
                             }))
                           }
-                          placeholder="اتركه فارغاً لإلغاء التنبيه"
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={isActionLoading}
-                        className="mt-6 w-full flex justify-center items-center rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-70"
+                        className="mt-6 flex w-full justify-center items-center rounded-xl bg-indigo-600 py-3.5 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-70"
                       >
                         {isActionLoading ? (
                           <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
-                          'حفظ بيانات الصنف'
+                          'حفظ بطاقة الصنف'
                         )}
                       </button>
                     </form>
                   )}
 
-                  {/* CUSTODY */}
-                  {sheetConfig.mode === 'CUSTODY' && sheetConfig.activeItem && (
-                    <div className="space-y-4">
-                      <div className="bg-amber-50 dark:bg-amber-900/10 p-4 rounded-xl border border-amber-100 dark:border-amber-900/30 mb-4 text-center">
-                        <p className="text-xs font-bold text-amber-700 dark:text-amber-500 mb-1">
-                          الرصيد المتاح في المخزن الرئيسي حالياً
-                        </p>
-                        <p className="text-2xl font-black text-amber-800 dark:text-amber-400">
-                          {sheetConfig.activeItem.stock_quantity}{' '}
-                          <span className="text-sm">
-                            {getUnitName(sheetConfig.activeItem.unit)}
-                          </span>
+                  {/* توريد بضاعة للمزرعة */}
+                  {sheetConfig.mode === 'MOVEMENT' && sheetConfig.activeItem && (
+                    <form onSubmit={handleMovementSubmit} className="space-y-4">
+                      <div className="bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30 mb-2">
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-400">
+                          الصنف المورد: {sheetConfig.activeItem.name}
                         </p>
                       </div>
 
-                      <h4 className="text-sm font-black text-slate-800 dark:text-white mb-2">
-                        الأرصدة المسحوبة كعُهد داخل العنابر النشطة:
-                      </h4>
-
-                      {cycles.filter((c) => c.status === 'ACTIVE').length ===
-                      0 ? (
-                        <div className="text-center py-8 text-slate-500 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
-                          لا توجد عنابر (دورات) نشطة حالياً
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {cycles
-                            .filter((c) => c.status === 'ACTIVE')
-                            .map((cycle) => {
-                              const custodyRecord = cycle.feed_custody?.find(
-                                (fc) => {
-                                  const itemId = fc.item_id?._id || fc.item_id;
-                                  return (
-                                    String(itemId) ===
-                                    String(sheetConfig.activeItem._id)
-                                  );
-                                }
-                              );
-                              const barnQty = custodyRecord
-                                ? custodyRecord.quantity
-                                : 0;
-
-                              return (
-                                <div
-                                  key={cycle._id}
-                                  className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800"
-                                >
-                                  <div>
-                                    <p className="text-sm font-black text-slate-800 dark:text-white">
-                                      {cycle.barn_id?.name || 'عنبر غير محدد'}
-                                    </p>
-                                    <p className="text-[10px] font-bold text-slate-500">
-                                      دورة: {cycle.name}
-                                    </p>
-                                  </div>
-                                  <div className="text-left">
-                                    <p
-                                      className={`text-lg font-black ${barnQty > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`}
-                                    >
-                                      {barnQty.toLocaleString()}{' '}
-                                      <span className="text-xs">
-                                        {getUnitName(
-                                          sheetConfig.activeItem.unit
-                                        )}
-                                      </span>
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* MOVEMENT FORM */}
-                  {sheetConfig.mode === 'MOVEMENT' &&
-                    sheetConfig.activeItem && (
-                      <form
-                        onSubmit={handleMovementSubmit}
-                        className="space-y-4"
-                      >
-                        <div className="bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30 mb-2">
-                          <p className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">
-                            إضافة مشتريات (وارد) للمخزن الرئيسي لتقوم العنابر
-                            بسحبها لاحقاً.
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="col-span-2 sm:col-span-1">
-                            <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                              نوع الإضافة (وارد) *
-                            </label>
-                            <select
-                              value={movementFormData.movement_type}
-                              onChange={(e) =>
-                                setMovementFormData((p) => ({
-                                  ...p,
-                                  movement_type: e.target.value,
-                                }))
-                              }
-                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                            >
-                              <option value="PURCHASE">
-                                شراء جديد (من مورد)
-                              </option>
-                              <option value="TRANSFER_IN">
-                                تحويل وارد من مزرعة أخرى
-                              </option>
-                              <option value="RETURN">
-                                مرتجع من عنبر للمخزن
-                              </option>
-                            </select>
-                          </div>
-                          <div className="col-span-2 sm:col-span-1">
-                            <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                              تاريخ الوارد *
-                            </label>
-                            <input
-                              type="date"
-                              value={movementFormData.movement_date}
-                              onChange={(e) =>
-                                setMovementFormData((p) => ({
-                                  ...p,
-                                  movement_date: e.target.value,
-                                }))
-                              }
-                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                              الكمية المستلمة (
-                              {getUnitName(sheetConfig.activeItem.unit)}) *
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0.01"
-                              value={movementFormData.quantity}
-                              onChange={(e) =>
-                                setMovementFormData((p) => ({
-                                  ...p,
-                                  quantity: e.target.value,
-                                }))
-                              }
-                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-lg font-black outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                              required
-                            />
-                          </div>
-                          {movementFormData.movement_type !== 'RETURN' && (
-                            <div>
-                              <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                                سعر شراء الوحدة (للوارد) *
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={movementFormData.unit_cost_at_time}
-                                onChange={(e) =>
-                                  setMovementFormData((p) => ({
-                                    ...p,
-                                    unit_cost_at_time: e.target.value,
-                                  }))
-                                }
-                                placeholder="ج.م"
-                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-lg font-black outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                                required
-                              />
-                            </div>
-                          )}
-                        </div>
-
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="mb-2 block text-xs font-bold text-slate-600 dark:text-slate-400">
-                            رقم الفاتورة أو المرجع (اختياري)
+                          <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                            الكمية ({getUnitName(sheetConfig.activeItem.unit)})
+                            *
                           </label>
                           <input
-                            type="text"
-                            value={movementFormData.reference_doc}
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={movementData.quantity}
                             onChange={(e) =>
-                              setMovementFormData((p) => ({
+                              setMovementData((p) => ({
                                 ...p,
-                                reference_doc: e.target.value,
+                                quantity: e.target.value,
                               }))
                             }
-                            placeholder="مثال: فاتورة شراء رقم 1234"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-lg font-black outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                            required
                           />
                         </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">
+                            سعر الوحدة الحالي (ج.م) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={movementData.unit_cost}
+                            onChange={(e) =>
+                              setMovementData((p) => ({
+                                ...p,
+                                unit_cost: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-lg font-black outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isActionLoading}
+                        className="mt-6 flex w-full justify-center items-center rounded-xl bg-emerald-600 py-3.5 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-70 shadow-lg shadow-emerald-600/20"
+                      >
+                        {isActionLoading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          'إرسال التوريد للمزرعة'
+                        )}
+                      </button>
+                    </form>
+                  )}
 
-                        <button
-                          type="submit"
-                          disabled={isActionLoading}
-                          className="mt-6 w-full flex justify-center items-center rounded-xl bg-indigo-600 py-3.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-70"
-                        >
-                          {isActionLoading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                          ) : (
-                            'تسجيل البضاعة بالمخزن'
-                          )}
-                        </button>
-                      </form>
-                    )}
+                  {/* كشف الحساب */}
+                  {sheetConfig.mode === 'LEDGER' && sheetConfig.activeItem && (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <h4 className="font-black text-slate-800 dark:text-white text-lg mb-1">
+                          {sheetConfig.activeItem.name}
+                        </h4>
+                        <div className="flex gap-4 text-xs font-bold text-slate-500">
+                          <span>
+                            الرصيد: {sheetConfig.activeItem.stock_quantity}{' '}
+                            {getUnitName(sheetConfig.activeItem.unit)}
+                          </span>
+                          <span>
+                            المتوسط:{' '}
+                            {formatCurrency(
+                              sheetConfig.activeItem.average_unit_cost
+                            )}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* LEDGER */}
-                  {sheetConfig.mode === 'LEDGER' && (
-                    <div className="space-y-3">
                       {isLedgerLoading ? (
                         <div className="flex justify-center py-10">
                           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                         </div>
-                      ) : itemLedger.length === 0 ? (
-                        <div className="text-center py-10 text-slate-500 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 rounded-2xl">
-                          لا توجد حركات مسجلة لهذا الصنف
-                        </div>
                       ) : (
-                        itemLedger.map((mov) => {
-                          const isOut = [
-                            'CONSUMPTION',
-                            'ADJUSTMENT',
-                            'BARN_TRANSFER',
-                            'SALE',
-                          ].includes(mov.movement_type);
-                          return (
-                            <div
-                              key={mov._id}
-                              className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col gap-3"
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className={`p-1.5 rounded-lg ${isOut ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}
-                                  >
-                                    {isOut ? (
-                                      <ArrowUpFromLine className="w-4 h-4" />
-                                    ) : (
-                                      <ArrowDownToLine className="w-4 h-4" />
-                                    )}
+                        <div className="space-y-3">
+                          {itemLedger.length === 0 ? (
+                            <p className="text-center text-sm font-bold text-slate-500 py-8">
+                              لا توجد حركات مسجلة
+                            </p>
+                          ) : (
+                            itemLedger.map((mov) => {
+                              const isOut = [
+                                'CONSUMPTION',
+                                'SALE',
+                                'BARN_TRANSFER',
+                              ].includes(mov.movement_type);
+                              return (
+                                <div
+                                  key={mov._id}
+                                  className="p-4 rounded-xl border bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 shadow-sm"
+                                >
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center gap-3">
+                                      <div
+                                        className={`p-2 rounded-lg ${
+                                          isOut
+                                            ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30'
+                                            : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30'
+                                        }`}
+                                      >
+                                        {isOut ? (
+                                          <ArrowUpFromLine className="w-4 h-4" />
+                                        ) : (
+                                          <ArrowDownToLine className="w-4 h-4" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                          {mov.reference_doc ||
+                                            (mov.movement_type ===
+                                            'BARN_TRANSFER'
+                                              ? 'صرف عهدة للعنبر'
+                                              : mov.movement_type)}
+                                        </p>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                          {new Date(
+                                            mov.movement_date
+                                          ).toLocaleDateString('ar-EG')}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-left">
+                                      <p
+                                        className={`text-lg font-black ${
+                                          isOut
+                                            ? 'text-rose-600'
+                                            : 'text-emerald-600'
+                                        }`}
+                                      >
+                                        {isOut ? '-' : '+'}
+                                        {mov.quantity}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-sm font-black text-slate-800 dark:text-white">
-                                      {getMovementTypeName(mov.movement_type)}
-                                    </p>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                      {new Date(
-                                        mov.movement_date
-                                      ).toLocaleDateString('ar-EG')}
-                                    </p>
+                                  <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400">
+                                    <span>
+                                      {mov.movement_type === 'PRODUCTION'
+                                        ? 'تُسعر بحسب السوق'
+                                        : `سعر الوحدة: ${formatCurrency(
+                                            mov.unit_cost_at_time
+                                          )}`}
+                                    </span>
+                                    <span>
+                                      القيمة: {formatCurrency(mov.total_value)}
+                                    </span>
                                   </div>
                                 </div>
-                                <div className="text-left">
-                                  <p
-                                    className={`text-lg font-black ${isOut ? 'text-rose-600' : 'text-emerald-600'}`}
-                                  >
-                                    {isOut ? '-' : '+'}
-                                    {mov.quantity}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400">
-                                <span>
-                                  {mov.movement_type === 'PRODUCTION'
-                                    ? 'تُسعر بحسب السوق'
-                                    : `سعر الوحدة: ${formatCurrency(mov.unit_cost_at_time)}`}
-                                </span>
-                                <span>
-                                  القيمة: {formatCurrency(mov.total_value)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })
+                              );
+                            })
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
