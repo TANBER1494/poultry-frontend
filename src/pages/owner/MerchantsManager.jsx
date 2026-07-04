@@ -24,6 +24,7 @@ import {
   UserPlus,
   UserMinus,
   AlertTriangle,
+  BadgeDollarSign 
 } from 'lucide-react';
 import merchantService from '../../services/merchantService';
 import farmService from '../../services/farmService';
@@ -554,7 +555,6 @@ const MerchantsManager = () => {
                   const docId =
                     (item.local_id || '').split('_').pop() ||
                     item._id.slice(-6);
-                  // 🚀 إضافة المندوب في الطباعة
                   const repText =
                     item.notes ||
                     (item.representative_name
