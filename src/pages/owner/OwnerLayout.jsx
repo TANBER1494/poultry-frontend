@@ -32,13 +32,11 @@ const OwnerLayout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
 
-  // 🚀 التعديل الجوهري: إضافة المبيعات وإزالة المشرفين
   const quickNav = [
     { name: 'الرئيسية', href: '/owner/dashboard', icon: LayoutDashboard },
     { name: 'المزارع', href: '/owner/farms', icon: Tractor },
     { name: 'الدورات', href: '/owner/cycles', icon: RefreshCcw },
-    { name: 'المبيعات', href: '/owner/sales', icon: ShoppingCart }, 
-    { name: 'التجار والموردين', href: '/owner/merchants', icon: Users }, 
+    { name: 'التجار والمبيعات', href: '/owner/merchants', icon: Users }, 
     { name: 'الماليات', href: '/owner/finances', icon: Wallet },
   ];
 

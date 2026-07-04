@@ -259,25 +259,17 @@ const MerchantsManager = () => {
     e.preventDefault();
     try {
       setIsActionLoading(true);
-      // 🚀 إجبار نوع الدفعة لتكون قبض دائمًا كما طلبت
-      await merchantService.recordPayment(sheetConfig.activeMerchant._id, {
-        ...paymentData,
+      await merchantService.recordPayment(sheetConfig.activeMerchant._id, { 
+        ...paymentData, 
         type: 'IN',
+        farm_id: selectedFarmId 
       });
-      showAlert.success(
-        'تم التسجيل',
-        'تم تحصيل الدفعة النقدية وتحديث المديونية بنجاح'
-      );
+      showAlert.success('تم التسجيل', 'تم تحصيل الدفعة النقدية وتحديث المديونية بنجاح');
       await openStatementSheet(sheetConfig.activeMerchant);
       loadFarmData(selectedFarmId);
     } catch (error) {
-      showAlert.error(
-        'فشل العملية',
-        error.response?.data?.message || 'تعذر تسجيل الدفعة'
-      );
-    } finally {
-      setIsActionLoading(false);
-    }
+      showAlert.error('فشل العملية', error.response?.data?.message || 'تعذر تسجيل الدفعة');
+    } finally { setIsActionLoading(false); }
   };
 
   // 🚀 معالجات المناديب
@@ -498,14 +490,12 @@ const MerchantsManager = () => {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  const handlePrintFullStatement = () => {
+const handlePrintFullStatement = () => {
     if (!statementData || !sheetConfig.activeMerchant) return;
     const merchant = sheetConfig.activeMerchant;
     const timeline = getUnifiedTimeline();
-
-    // 🚀 القراءة من المديونية الحية القادمة من الباك إند
-    const currentDebt =
-      statementData?.merchant_info?.current_calculated_balance || 0;
+    
+    const currentDebt = statementData?.merchant_info?.current_calculated_balance || 0;
 
     const printContent = `
       <html dir="rtl">
@@ -521,20 +511,20 @@ const MerchantsManager = () => {
             table { width: 100%; border-collapse: collapse; font-size: 12px; }
             th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: right; }
             th { background-color: #f1f5f9; }
-            .debt { color: #dc2626; font-weight: bold; }
+            .val-col { font-weight: bold; color: #1e293b; }
             .credit { color: #059669; font-weight: bold; }
           </style>
         </head>
         <body>
           <div class="header">
-            <h2>كشف حساب مفصل (عميل / مورد)</h2>
+            <h2>كشف حساب مفصل (العملاء والمبيعات)</h2>
             <h3>الشركة: ${merchant.company_name} | الهاتف: ${merchant.company_phone || '-'}</h3>
             <p>تاريخ استخراج الكشف: ${new Date().toLocaleString('ar-EG')}</p>
           </div>
           
           <div class="summary">
-            <div><h4>الرصيد الحالي (المديونية)</h4><p class="debt">${Math.abs(currentDebt).toLocaleString()} ج.م ${currentDebt > 0 ? '(عليه)' : currentDebt < 0 ? '(له)' : ''}</p></div>
-            <div><h4>إجمالي المسحوبات (الكمية)</h4><p>${(statementData.total_purchases_qty || 0).toLocaleString()}</p></div>
+            <div><h4>المديونية الحالية (باقي عليه)</h4><p style="color:#dc2626;">${Math.abs(currentDebt).toLocaleString()} ج.م</p></div>
+            <div><h4>إجمالي المسحوبات (أطباق)</h4><p>${(statementData.total_purchases_qty || 0).toLocaleString()}</p></div>
           </div>
 
           <table>
@@ -544,41 +534,34 @@ const MerchantsManager = () => {
                 <th>رقم المستند</th>
                 <th>نوع الحركة</th>
                 <th>البيان والملاحظات</th>
-                <th>مدين (عليه)</th>
-                <th>دائن (دفع)</th>
+                <th>إجمالي الفاتورة</th>
+                <th>المدفوع / المُحصل</th>
               </tr>
             </thead>
             <tbody>
-              ${timeline
-                .map((item) => {
+              ${timeline.map((item) => {
                   const date = item._date.toLocaleDateString('ar-EG');
-                  const docId =
-                    (item.local_id || '').split('_').pop() ||
-                    item._id.slice(-6);
-                  const repText =
-                    item.notes ||
-                    (item.representative_name
-                      ? `المندوب: ${item.representative_name}`
-                      : '-');
+                  const docId = (item.local_id || '').split('_').pop() || item._id.slice(-6);
+                  const repText = item.notes || (item.representative_name ? 'المندوب: ' + item.representative_name : '-');
 
                   if (item._recordType === 'INVOICE') {
-                    return `<tr>
-                    <td>${date}</td><td dir="ltr">#${docId}</td><td>فاتورة مبيعات</td>
-                    <td>${repText}</td><td class="debt">${Number(item.total_amount).toLocaleString()}</td>
-                    <td class="credit">${Number(item.paid_amount).toLocaleString()}</td>
-                  </tr>`;
+                    const remainingStr = item.remaining_amount > 0 ? '<br><span style="font-size:10px; color:#dc2626;">(باقي آجل: ' + Number(item.remaining_amount).toLocaleString() + ')</span>' : '';
+                    return '<tr>' +
+                    '<td>' + date + '</td><td dir="ltr">#' + docId + '</td><td>فاتورة مبيعات</td>' +
+                    '<td>' + repText + '</td>' +
+                    '<td class="val-col">' + Number(item.total_amount).toLocaleString() + '</td>' +
+                    '<td class="credit">' + Number(item.paid_amount).toLocaleString() + remainingStr + '</td>' +
+                  '</tr>';
                   } else {
-                    if (item.invoice_id) return '';
-                    const isPaymentFromHim = item.type === 'IN';
-                    return `<tr>
-                    <td>${date}</td><td dir="ltr">#${docId}</td><td>سند ${isPaymentFromHim ? 'قبض' : 'صرف'}</td>
-                    <td>${item.notes || '-'}</td>
-                    <td class="debt">${isPaymentFromHim ? '-' : Number(item.amount).toLocaleString()}</td>
-                    <td class="credit">${isPaymentFromHim ? Number(item.amount).toLocaleString() : '-'}</td>
-                  </tr>`;
+                    if (item.invoice_id) return ''; 
+                    return '<tr>' +
+                    '<td>' + date + '</td><td dir="ltr">#' + docId + '</td><td>سند تحصيل نقدي</td>' +
+                    '<td>' + (item.notes || '-') + '</td>' +
+                    '<td class="val-col">-</td>' +
+                    '<td class="credit">' + Number(item.amount).toLocaleString() + '</td>' +
+                  '</tr>';
                   }
-                })
-                .join('')}
+                }).join('')}
             </tbody>
           </table>
         </body>
@@ -1309,14 +1292,9 @@ const MerchantsManager = () => {
                   {sheetConfig.mode === 'ADD_PAYMENT' && (
                     <form onSubmit={handlePaymentSubmit} className="space-y-4">
                       <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-4 rounded-xl mb-4 text-center">
-                        <p className="text-xs font-bold text-amber-700 dark:text-amber-500 mb-1">
-                          المديونية الحالية (عليه)
-                        </p>
+                        <p className="text-xs font-bold text-amber-700 dark:text-amber-500 mb-1">المديونية الحالية (عليه)</p>
                         <p className="text-xl font-black text-amber-800 dark:text-amber-400">
-                          {Math.abs(
-                            sheetConfig.activeMerchant?.current_balance || 0
-                          ).toLocaleString()}{' '}
-                          ج.م
+                          {Math.abs(statementData?.merchant_info?.current_calculated_balance ?? sheetConfig.activeMerchant?.current_balance ?? 0).toLocaleString()} ج.م
                         </p>
                       </div>
 

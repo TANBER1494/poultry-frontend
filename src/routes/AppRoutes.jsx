@@ -26,7 +26,6 @@ const SupervisorsManager = lazy(
   () => import('../pages/owner/SupervisorsManager')
 );
 const MerchantsManager = lazy(() => import('../pages/owner/MerchantsManager'));
-const SalesManager = lazy(() => import('../pages/owner/SalesManager'));
 const InventoryManager = lazy(() => import('../pages/owner/InventoryManager'));
 
 const FinancesManager = lazy(() => import('../pages/owner/FinancesManager'));
@@ -129,7 +128,6 @@ const AppRoutes = () => {
               element={<CycleDetails />}
             />
             <Route path="merchants" element={<MerchantsManager />} />
-            <Route path="sales" element={<SalesManager />} />
             <Route path="inventory" element={<InventoryManager />} />
             <Route path="subscriptions" element={<SubscriptionsManager />} />
             {/* <Route path="workers" element={<WorkersManager />} /> */}
