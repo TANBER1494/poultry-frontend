@@ -5,7 +5,9 @@ const MERCHANTS_ENDPOINT = '/merchants';
 const merchantService = {
   getMerchants: async (farmId, type = '') => {
     const query = type ? `?merchant_type=${type}` : '';
-    const response = await api.get(`${MERCHANTS_ENDPOINT}/farm/${farmId}${query}`);
+    const response = await api.get(
+      `${MERCHANTS_ENDPOINT}/farm/${farmId}${query}`
+    );
     return response.data;
   },
 
@@ -21,7 +23,7 @@ const merchantService = {
 
   deleteMerchant: async (id, farmId) => {
     const response = await api.delete(`${MERCHANTS_ENDPOINT}/${id}`, {
-      data: { farm_id: farmId }
+      data: { farm_id: farmId },
     });
     return response.data;
   },
@@ -32,16 +34,30 @@ const merchantService = {
   },
 
   addRepresentative: async (merchantId, data) => {
-    const response = await api.post(`${MERCHANTS_ENDPOINT}/${merchantId}/representatives`, data);
+    const response = await api.post(
+      `${MERCHANTS_ENDPOINT}/${merchantId}/representatives`,
+      data
+    );
     return response.data;
   },
 
   removeRepresentative: async (merchantId, repId, farmId) => {
-    const response = await api.delete(`${MERCHANTS_ENDPOINT}/${merchantId}/representatives/${repId}`, {
-      data: { farm_id: farmId }
-    });
+    const response = await api.delete(
+      `${MERCHANTS_ENDPOINT}/${merchantId}/representatives/${repId}`,
+      {
+        data: { farm_id: farmId },
+      }
+    );
     return response.data;
-  }
+  },
+
+  recordPayment: async (merchantId, data) => {
+    const response = await api.post(
+      `${MERCHANTS_ENDPOINT}/${merchantId}/payments`,
+      data
+    );
+    return response.data;
+  },
 };
 
 export default merchantService;
