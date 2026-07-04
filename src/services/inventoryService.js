@@ -21,9 +21,11 @@ const inventoryService = {
     return response.data;
   },
 
-  // 4. أرشفة/حذف صنف
-  deleteInventoryItem: async (itemId) => {
-    const response = await api.delete(`${INVENTORY_ENDPOINT}/items/${itemId}`);
+  // 4.  أرشفة/حذف صنف (تم إصلاح التمرير الأمني للـ farm_id)
+  deleteInventoryItem: async (itemId, farmId) => {
+    const response = await api.delete(`${INVENTORY_ENDPOINT}/items/${itemId}`, {
+      data: { farm_id: farmId }
+    });
     return response.data;
   },
 
@@ -38,7 +40,8 @@ const inventoryService = {
     const response = await api.get(`${INVENTORY_ENDPOINT}/items/${itemId}/movements`);
     return response.data;
   },
-  // صرف عهدة من المخزن الرئيسي للعنبر
+  
+  // 7. صرف عهدة من المخزن الرئيسي للعنبر
   transferToBarn: async (data) => {
     const response = await api.post(`${INVENTORY_ENDPOINT}/transfer-to-barn`, data);
     return response.data;
