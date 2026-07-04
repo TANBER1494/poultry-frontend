@@ -21,7 +21,7 @@ const inventoryService = {
     return response.data;
   },
 
-  // 4.  أرشفة/حذف صنف (تم إصلاح التمرير الأمني للـ farm_id)
+  // 4. أرشفة/حذف صنف (🚀 التعديل الجراحي: تمرير farmId كـ body لتجاوز حماية המيدل وير)
   deleteInventoryItem: async (itemId, farmId) => {
     const response = await api.delete(`${INVENTORY_ENDPOINT}/items/${itemId}`, {
       data: { farm_id: farmId }
@@ -46,6 +46,16 @@ const inventoryService = {
     const response = await api.post(`${INVENTORY_ENDPOINT}/transfer-to-barn`, data);
     return response.data;
   },
+
+  confirmMovement: async (movementId) => {
+    const response = await api.put(`${INVENTORY_ENDPOINT}/movements/${movementId}/confirm`);
+    return response.data;
+  },
+
+  produceFeed: async (data) => {
+    const response = await api.post(`${INVENTORY_ENDPOINT}/produce-feed`, data);
+    return response.data;
+  }
 };
 
 export default inventoryService;
