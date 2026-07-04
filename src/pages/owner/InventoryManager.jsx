@@ -413,7 +413,6 @@ const InventoryManager = () => {
                     </div>
                   )}
 
-                  {/* 🛡️ تحديث سعر السوق للبيض */}
                   {sheetConfig.mode === 'UPDATE_PRICE' && sheetConfig.activeItem && (
                      <form onSubmit={handleItemSubmit} className="space-y-4">
                        <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/30 mb-2">
