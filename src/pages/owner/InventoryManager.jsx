@@ -181,25 +181,29 @@ const InventoryManager = () => {
     if (!movementFormData.quantity) return showAlert.error('خطأ', 'يجب إدخال الكمية');
     if (!movementFormData.unit_cost_at_time && movementFormData.movement_type !== 'RETURN') return showAlert.error('خطأ', 'يجب إدخال السعر للوارد');
 
-   try {
+    try {
       setIsActionLoading(true);
       const payload = {
-        local_id: `MOV_${Date.now()}`,
+        local_id: `MOV-${Date.now()}`,
         farm_id: selectedFarmId,
         item_id: sheetConfig.activeItem._id,
-        movement_type: movementData.type,
-        quantity: movementData.quantity,
-        unit_cost_at_time: movementData.unit_cost,
-        movement_date: movementData.date,
-        status: 'PENDING' 
+        movement_type: movementFormData.movement_type,
+        quantity: movementFormData.quantity,
+        unit_cost_at_time: movementFormData.unit_cost_at_time || sheetConfig.activeItem.average_unit_cost,
+        movement_date: movementFormData.movement_date,
+        reference_doc: movementFormData.reference_doc,
+        status: ['PURCHASE', 'TRANSFER_IN'].includes(movementFormData.movement_type) ? 'PENDING' : 'COMPLETED'
       };
-      const res = await inventoryService.recordMovement(payload);
-      showAlert.success('تم الإرسال', 'تم تسجيل التوريد وإرسال إشعار للمشرف لتأكيد الاستلام');
+
+      await inventoryService.recordMovement(payload);
+      showAlert.success('نجاح', 'تم إرسال التوريد وإشعار المشرف بنجاح');
       closeSheet();
-      loadFarmData(selectedFarmId);
+      await fetchFarmData(selectedFarmId); // أو loadFarmData حسب اسم الدالة عندك
     } catch (error) {
-      showAlert.error('خطأ', error.response?.data?.message || 'فشل التسجيل');
-    } finally { setIsActionLoading(false); 
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تسجيل الحركة');
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
   const getCategoryMeta = (cat) => {
