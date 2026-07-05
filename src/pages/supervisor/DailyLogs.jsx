@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, X, Loader2, ClipboardList, Activity, Package, 
-  Bird, CalendarDays, TrendingDown, Wheat, Table, Search, AlertTriangle, Printer, Syringe
+  Bird, CalendarDays, Wheat, Table, Search, Printer, ChevronDown, ChevronUp
 } from 'lucide-react';
 import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
@@ -20,9 +20,10 @@ const DailyLogs = () => {
   
   const [activeCycles, setActiveCycles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
-  const [generalItems, setGeneralItems] = useState([]); // 🚀 الأدوية والمستلزمات
+  const [generalItems, setGeneralItems] = useState([]); 
   
   const [logsByDate, setLogsByDate] = useState({});
+  const [expandedDates, setExpandedDates] = useState([]); 
   const [searchDate, setSearchDate] = useState(''); 
   
   const [isLoading, setIsLoading] = useState(true);
@@ -33,7 +34,6 @@ const DailyLogs = () => {
 
   const [globalLogDate, setGlobalLogDate] = useState(new Date().toISOString().split('T')[0]);
   const [globalFeedItem, setGlobalFeedItem] = useState('');
-  
   const [bulkData, setBulkData] = useState({});
 
   useEffect(() => {
@@ -70,7 +70,6 @@ const DailyLogs = () => {
       
       if (isMounted) {
         const active = (cyclesRes.cycles || []).filter(c => c.status === 'ACTIVE');
-        // ترتيب العنابر أبجدياً
         active.sort((a, b) => (a.barn_id?.name || '').localeCompare(b.barn_id?.name || '', 'ar', { numeric: true }));
         setActiveCycles(active);
         
@@ -78,7 +77,6 @@ const DailyLogs = () => {
         setFeedItems(invItems.filter(item => item.category === 'FEED'));
         setGeneralItems(invItems.filter(item => !['FEED', 'PRODUCT'].includes(item.category)));
 
-        // تهيئة مصفوفة الإدخال المجمع
         const initialBulk = {};
         active.forEach(c => {
           initialBulk[c._id] = {
@@ -122,6 +120,8 @@ const DailyLogs = () => {
       }, {});
 
       setLogsByDate(grouped);
+      const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
+      if (sortedDates.length > 0) setExpandedDates([sortedDates[0]]);
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب السجلات اليومية');
     } finally {
@@ -138,6 +138,10 @@ const DailyLogs = () => {
     return Math.ceil((logDate - start) / (1000 * 60 * 60 * 24)) + 1;
   };
 
+  const toggleDateAccordion = (dateStr) => {
+    setExpandedDates(prev => prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr]);
+  };
+
   const handleBulkChange = (cycleId, field, value) => {
     setBulkData(prev => ({
       ...prev,
@@ -145,18 +149,15 @@ const DailyLogs = () => {
     }));
   };
 
-  // 🚀 الإرسال المجمع
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
     if (!globalLogDate) return showAlert.error('خطأ', 'يجب تحديد تاريخ اليومية');
 
     const logsArray = [];
-    
     for (const cycle of activeCycles) {
       const row = bulkData[cycle._id];
       const age = calculateAge(cycle.start_date, globalLogDate);
       
-      // تجاهل العنابر التي ليس لها داتا أو عمرها غير صالح
       const hasData = row.mortality_count || row.feed_consumed_bags || row.egg_trays_produced || row.notes || row.medication_quantity;
       if (!hasData || age < 1) continue;
 
@@ -175,6 +176,7 @@ const DailyLogs = () => {
       logsArray.push({
         local_id: `LOG_${cycle._id}_${Date.now()}_${Math.random()}`,
         barn_id: cycle.barn_id._id,
+        barn_name: cycle.barn_id.name, // 🚀 إرسال اسم العنبر لرسائل التنبيه الدقيقة
         cycle_id: cycle._id,
         log_date: globalLogDate,
         age_in_days: age,
@@ -187,9 +189,7 @@ const DailyLogs = () => {
       });
     }
 
-    if (logsArray.length === 0) {
-      return showAlert.error('تنبيه', 'لم تقم بإدخال أي بيانات لأي عنبر.');
-    }
+    if (logsArray.length === 0) return showAlert.error('تنبيه', 'لم تقم بإدخال أي بيانات.');
 
     try {
       setIsSubmitting(true);
@@ -197,7 +197,6 @@ const DailyLogs = () => {
       showAlert.success('نجاح', `تم تسجيل وتحديث المخازن لعدد (${logsArray.length}) عنبر بنجاح`);
       setIsFormOpen(false);
       
-      // تصفير الخانات
       const resetBulk = {};
       activeCycles.forEach(c => {
         resetBulk[c._id] = { mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', medication_item_id: '', medication_quantity: '', notes: '' };
@@ -206,10 +205,71 @@ const DailyLogs = () => {
       
       await fetchDependencies(selectedFarmId); 
     } catch (error) {
-      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تسجيل اليوميات المجمعة');
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تسجيل اليوميات');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // 🖨️ دالة الطباعة الاحترافية ليوم محدد
+  const handlePrintDay = (dateStr, dayLogs) => {
+    const printWindow = window.open('', '_blank');
+    const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    
+    let tableRows = '';
+    dayLogs.forEach(log => {
+      const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
+      const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join(', ');
+      tableRows += `
+        <tr>
+          <td>${log.cycleDetails?.barn_id?.name || '-'} <br><small>${typeLabel}</small></td>
+          <td>${log.age_in_days} يوم</td>
+          <td>${log.mortality_count || '-'}</td>
+          <td>${log.feed_consumed_bags || '-'}</td>
+          <td>${log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
+          <td>${meds || '-'}</td>
+          <td>${log.notes || '-'}</td>
+        </tr>
+      `;
+    });
+
+    const htmlContent = `
+      <html dir="rtl">
+        <head>
+          <title>سجل اليومية - ${formattedDate}</title>
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; padding: 20px; color: #333; }
+            h2 { text-align: center; color: #1e1b4b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; text-align: right; }
+            td { border: 1px solid #cbd5e1; padding: 10px; text-align: right; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #64748b; }
+          </style>
+        </head>
+        <body>
+          <h2>يوميات المزرعة - ${formattedDate}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>العنبر (النوع)</th>
+                <th>العمر</th>
+                <th>النافق</th>
+                <th>العلف (شكاير)</th>
+                <th>البيض (أطباق)</th>
+                <th>أدوية مسحوبة</th>
+                <th>ملاحظات</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          <div class="footer">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</div>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const sortedAndFilteredDates = Object.keys(logsByDate)
@@ -222,9 +282,8 @@ const DailyLogs = () => {
   const overlayVariants = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } };
 
   return (
-    <div className="space-y-6 print:space-y-2">
-      {/* 🖨️ الهيدر يختفي عند الطباعة */}
-      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Table className="w-6 h-6 text-indigo-500" /> سجلات المزرعة المجمعة
@@ -239,10 +298,6 @@ const DailyLogs = () => {
             {searchDate && <button onClick={() => setSearchDate('')} className="absolute left-2 top-2.5 text-rose-500 hover:text-rose-700"><X className="w-4 h-4"/></button>}
           </div>
 
-          <button onClick={() => window.print()} className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-slate-700 px-4 py-2.5 text-sm font-bold transition-all hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
-            <Printer className="w-5 h-5" /> طباعة
-          </button>
-
           <button onClick={() => setIsFormOpen(true)} disabled={activeCycles.length === 0} className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-sm disabled:opacity-50">
             <Plus className="h-5 w-5" /><span className="hidden sm:inline">إدخال مجمع</span>
           </button>
@@ -250,81 +305,92 @@ const DailyLogs = () => {
       </div>
 
       {isLoading || isLogsLoading ? (
-        <div className="flex h-64 items-center justify-center print:hidden"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
+        <div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
       ) : activeCycles.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50 print:hidden">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
           <Activity className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-lg font-black text-slate-800 dark:text-white">لا توجد دورات نشطة</h3>
           <p className="mt-2 text-sm font-medium text-slate-500">قم ببدء دورة إنتاجية لتتمكن من تسجيل يومياتها.</p>
         </div>
       ) : sortedAndFilteredDates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50 print:hidden">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
           <ClipboardList className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-lg font-black text-slate-800 dark:text-white">لا توجد سجلات</h3>
           <p className="mt-2 text-sm font-medium text-slate-500 mb-4">لم يتم تسجيل أي يومية {searchDate && 'في هذا التاريخ'}.</p>
         </div>
       ) : (
-        <div className="space-y-6 print:space-y-8">
+        <div className="space-y-4">
           {sortedAndFilteredDates.map(dateStr => {
+            const isExpanded = expandedDates.includes(dateStr);
             const dayLogs = logsByDate[dateStr];
             
             return (
-              <div key={dateStr} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden print:border-slate-400 print:shadow-none print:break-inside-avoid">
-                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 print:bg-white print:border-b-2 print:border-black flex items-center gap-3">
-                  <div className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 p-2 rounded-lg print:hidden">
-                    <CalendarDays className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-slate-800 dark:text-white text-lg print:text-black">
-                      يومية: {new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5 print:text-slate-600">تم تسجيل ({dayLogs.length}) عنابر</p>
+              <div key={dateStr} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
+                <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                  <button onClick={() => toggleDateAccordion(dateStr)} className="flex items-center gap-3 flex-1 text-right">
+                    <div className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 p-2 rounded-lg">
+                      <CalendarDays className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-slate-800 dark:text-white text-sm">{new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                      <p className="text-[11px] font-bold text-slate-500 mt-0.5">مسجل {dayLogs.length} عنابر</p>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handlePrintDay(dateStr, dayLogs)} title="طباعة يومية هذا التاريخ" className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors">
+                      <Printer className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => toggleDateAccordion(dateStr)} className="p-1.5 text-slate-400">
+                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </button>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right text-sm print:text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-slate-500 dark:text-slate-400 print:bg-slate-100 print:text-black">
-                      <tr>
-                        <th className="p-3 whitespace-nowrap border-l border-slate-100 dark:border-slate-700 print:border-slate-300">العنبر (النوع)</th>
-                        <th className="p-3 border-l border-slate-100 dark:border-slate-700 print:border-slate-300">العمر</th>
-                        <th className="p-3 text-rose-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">النافق</th>
-                        <th className="p-3 text-amber-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">علف (شكاير)</th>
-                        <th className="p-3 text-emerald-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">بيض (أطباق)</th>
-                        <th className="p-3 text-indigo-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">أدوية ومستلزمات</th>
-                        <th className="p-3 w-1/4">ملاحظات</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-300">
-                      {dayLogs.map(log => (
-                        <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors print:border-b print:border-slate-300">
-                          <td className="p-3 border-l border-slate-50 dark:border-slate-800 print:border-slate-300">
-                            <div className="font-black text-slate-800 dark:text-white print:text-black">{log.cycleDetails?.barn_id?.name || 'غير معروف'}</div>
-                            <div className="text-[10px] font-bold text-slate-500 print:text-slate-600 mt-0.5">{getCycleTypeLabel(log.cycleDetails?.type)}</div>
-                          </td>
-                          <td className="p-3 font-black border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.age_in_days} <span className="text-[9px] text-slate-400">يوم</span></td>
-                          <td className="p-3 font-black text-rose-600 dark:text-rose-400 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.mortality_count || '-'}</td>
-                          <td className="p-3 font-black text-amber-600 dark:text-amber-500 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.feed_consumed_bags || '-'}</td>
-                          <td className="p-3 font-black text-emerald-600 dark:text-emerald-400 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
-                          <td className="p-3 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">
-                            {log.consumed_medications && log.consumed_medications.length > 0 ? (
-                              <div className="flex flex-col gap-1">
-                                {log.consumed_medications.map((med, i) => (
-                                  <span key={i} className="text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 print:bg-transparent px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-800/50 print:border-none">
-                                    {med.name} ({med.quantity})
-                                  </span>
-                                ))}
-                              </div>
-                            ) : '-'}
-                          </td>
-                          <td className="p-3 text-xs font-medium text-slate-600 dark:text-slate-400 print:text-black">
-                            {log.notes || '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                      <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-right text-sm">
+                          <thead className="bg-white dark:bg-slate-900 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                            <tr>
+                              <th className="p-3 whitespace-nowrap border-l border-slate-100 dark:border-slate-800 min-w-[120px]">العنبر (العمر)</th>
+                              <th className="p-3 text-rose-500 border-l border-slate-100 dark:border-slate-800">النافق</th>
+                              <th className="p-3 text-amber-600 border-l border-slate-100 dark:border-slate-800">علف (شكاير)</th>
+                              <th className="p-3 text-emerald-600 border-l border-slate-100 dark:border-slate-800">بيض (أطباق)</th>
+                              <th className="p-3 text-indigo-500 border-l border-slate-100 dark:border-slate-800 min-w-[150px]">أدوية ومستلزمات</th>
+                              <th className="p-3 min-w-[150px]">ملاحظات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50 text-[13px] font-medium text-slate-700 dark:text-slate-300">
+                            {dayLogs.map(log => (
+                              <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                                <td className="p-3 border-l border-slate-50 dark:border-slate-800/50 bg-white dark:bg-slate-900">
+                                  <div className="font-black text-slate-800 dark:text-white leading-tight">{log.cycleDetails?.barn_id?.name || '-'}</div>
+                                  <div className="text-[10px] font-bold text-slate-500 mt-1">عمر {log.age_in_days} | {getCycleTypeLabel(log.cycleDetails?.type)}</div>
+                                </td>
+                                <td className="p-3 font-black text-rose-600 dark:text-rose-400 border-l border-slate-50 dark:border-slate-800/50">{log.mortality_count || '-'}</td>
+                                <td className="p-3 font-black text-amber-600 dark:text-amber-500 border-l border-slate-50 dark:border-slate-800/50">{log.feed_consumed_bags || '-'}</td>
+                                <td className="p-3 font-black text-emerald-600 dark:text-emerald-400 border-l border-slate-50 dark:border-slate-800/50">{log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
+                                <td className="p-3 border-l border-slate-50 dark:border-slate-800/50">
+                                  {log.consumed_medications && log.consumed_medications.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {log.consumed_medications.map((med, i) => (
+                                        <span key={i} className="text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                                          {med.name} ({med.quantity})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : '-'}
+                                </td>
+                                <td className="p-3 text-[11px] truncate max-w-[150px]" title={log.notes}>{log.notes || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}
@@ -335,8 +401,8 @@ const DailyLogs = () => {
       <AnimatePresence>
         {isFormOpen && (
           <>
-            <motion.div variants={overlayVariants} initial="hidden" animate="visible" exit="hidden" onClick={() => setIsFormOpen(false)} className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm print:hidden" />
-            <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4 print:hidden">
+            <motion.div variants={overlayVariants} initial="hidden" animate="visible" exit="hidden" onClick={() => setIsFormOpen(false)} className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm" />
+            <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4">
               <motion.div variants={sheetVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-6xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[95dvh]">
                 
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-900 rounded-t-3xl">
@@ -350,7 +416,6 @@ const DailyLogs = () => {
                 <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50 dark:bg-slate-900/50">
                   <form id="bulkDailyLogForm" onSubmit={handleBulkSubmit} className="space-y-4">
                     
-                    {/* 🚀 إعدادات اليومية (تطبق على كل العنابر) */}
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row gap-4 mb-6">
                       <div className="w-full sm:w-1/3">
                         <label className="mb-1.5 block text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">تاريخ اليومية للكل *</label>
@@ -365,7 +430,6 @@ const DailyLogs = () => {
                       </div>
                     </div>
 
-                    {/* 🚀 جدول السبريدشيت للعنابر */}
                     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                       <div className="overflow-x-auto custom-scrollbar">
                         <table className="w-full text-right text-sm min-w-[800px]">
@@ -422,7 +486,7 @@ const DailyLogs = () => {
                                         {generalItems.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
                                       </select>
                                       {bulkData[cycle._id]?.medication_item_id && (
-                                        <input type="number" step="0.01" min="0" placeholder="الكمية (لتر/كجم)" value={bulkData[cycle._id]?.medication_quantity} onChange={e => handleBulkChange(cycle._id, 'medication_quantity', e.target.value)} className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-[11px] font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                                        <input type="number" step="0.01" min="0" placeholder="الكمية المسحوبة (لتر/كجم/عبوة)" value={bulkData[cycle._id]?.medication_quantity} onChange={e => handleBulkChange(cycle._id, 'medication_quantity', e.target.value)} className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-[11px] font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
                                       )}
                                     </div>
                                   </td>
