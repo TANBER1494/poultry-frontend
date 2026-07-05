@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Receipt, Tractor, Loader2, Printer, CalendarDays, Search, Building2, ChevronDown, ChevronUp, UserCircle
+  Receipt, Tractor, Loader2, Printer, CalendarDays, Search, Building2, ChevronDown, ChevronUp, UserCircle, Share2
 } from 'lucide-react';
+import html2canvas from 'html2canvas'; // 🚀 استيراد مكتبة الصور
 import farmService from '../../services/farmService';
 import invoiceService from '../../services/invoiceService';
 import { showAlert } from '../../utils/alert';
@@ -12,10 +13,11 @@ const SupervisorInvoices = () => {
   const [selectedFarmId, setSelectedFarmId] = useState('');
   
   const [invoicesByMerchant, setInvoicesByMerchant] = useState({});
-  const [expandedMerchants, setExpandedMerchants] = useState([]); // للتحكم في القوائم المنسدلة
+  const [expandedMerchants, setExpandedMerchants] = useState([]); 
   
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [sharingId, setSharingId] = useState(null); // 🚀 تتبع الفاتورة الجاري مشاركتها
 
   useEffect(() => {
     let isMounted = true;
@@ -47,15 +49,12 @@ const SupervisorInvoices = () => {
       setIsLoading(true);
       const res = await invoiceService.getInvoices(farmId, { invoice_type: 'SALE' });
       
-      //  التصفية التشغيلية (Domain Isolation): إجبار الشاشة على عرض فواتير البيض فقط للمشرف
-      // نبحث داخل أصناف الفاتورة عن أي صنف يحتوي على كلمة "بيض" أو "طبق"
       const eggInvoicesOnly = (res.invoices || []).filter(inv => 
         inv.items && inv.items.some(item => 
           item.item_name.includes('بيض') || item.item_name.includes('طبق')
         )
       );
 
-      //  التجميع المعماري: تجميع فواتير البيض فقط حسب اسم الشركة
       const grouped = eggInvoicesOnly.reduce((acc, inv) => {
         const merchantName = inv.merchant_id?.company_name || 'تجار غير محددين / محذوفين';
         if (!acc[merchantName]) acc[merchantName] = [];
@@ -65,7 +64,6 @@ const SupervisorInvoices = () => {
 
       if (isMounted) {
         setInvoicesByMerchant(grouped);
-        // فتح أول شركة تلقائياً
         const sortedMerchants = Object.keys(grouped).sort();
         if (sortedMerchants.length > 0) {
           setExpandedMerchants([sortedMerchants[0]]);
@@ -90,59 +88,167 @@ const SupervisorInvoices = () => {
     );
   };
 
-  // 🖨️ دالة الطباعة الاحترافية
-  const handlePrint = (inv) => {
-    const quantity = inv.items && inv.items.length > 0 ? inv.items[0].quantity : 0;
+  // 🚀 استخراج بيانات الفاتورة لبناء الإيصال (مشترك للطباعة والصورة)
+  const buildReceiptHTML = (inv) => {
     const invDate = new Date(inv.invoice_date);
     const companyName = inv.merchant_id?.company_name || 'غير محدد';
-    // استخراج اسم المندوب من الملاحظات إذا كان موجوداً
     const repName = inv.representative_name || inv.notes?.replace('تم التسليم للمندوب/السائق:', '') || 'غير مسجل';
+    const invoiceNumber = inv.local_id.split('_')[1] || inv.local_id;
 
-    const printContent = `
+    // استخراج الأصناف
+    const itemsList = (inv.items || []).map(item => `
+      <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #cbd5e1; padding: 8px 0; font-size: 14px;">
+        <span style="font-weight: bold; color: #334155;">${item.item_name}</span>
+        <span style="font-weight: 900; color: #0f172a;">${item.quantity} طبق</span>
+      </div>
+    `).join('');
+
+    return `
+      <div style="direction: rtl; font-family: 'Tahoma', Arial, sans-serif; padding: 30px 20px; max-width: 400px; margin: auto; background: #fff; color: #0f172a;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="margin: 0 0 5px 0; font-size: 22px; color: #1e1b4b; font-weight: 900;">إيصال تسليم مبيعات</h2>
+          <p style="margin: 0; font-size: 13px; color: #64748b;">إدارة المزارع والدواجن</p>
+        </div>
+        
+        <div style="background: #f8fafc; border-radius: 12px; padding: 15px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+            <span style="color: #64748b; font-weight: bold;">رقم الفاتورة:</span> 
+            <span style="font-weight: 900; background: #e0e7ff; color: #4f46e5; padding: 2px 6px; border-radius: 4px;">#${invoiceNumber}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+            <span style="color: #64748b; font-weight: bold;">التاريخ:</span> 
+            <span style="font-weight: bold;">${invDate.toLocaleDateString('ar-EG')}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;">
+            <span style="color: #64748b; font-weight: bold;">الوقت:</span> 
+            <span style="font-weight: bold;">${invDate.toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}</span>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px;">
+            <span style="color: #64748b; font-weight: bold;">الشركة المستلمة:</span> 
+            <span style="font-weight: 900;">${companyName}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 14px;">
+            <span style="color: #64748b; font-weight: bold;">المندوب / السائق:</span> 
+            <span style="font-weight: 900;">${repName}</span>
+          </div>
+        </div>
+
+        <div style="border-top: 2px dashed #cbd5e1; padding-top: 15px; margin-bottom: 20px;">
+          <div style="color: #64748b; font-size: 12px; font-weight: bold; margin-bottom: 10px;">تفاصيل الكميات:</div>
+          ${itemsList}
+        </div>
+
+        <div style="background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid #e2e8f0;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px;">
+            <span style="color: #334155; font-weight: 900;">الإجمالي المطلوب:</span> 
+            <span style="font-weight: 900; color: #0f172a;">${inv.total_amount.toLocaleString()} ج.م</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+            <span style="color: #64748b; font-weight: bold;">المدفوع نقداً:</span> 
+            <span style="font-weight: bold; color: #059669;">${inv.paid_amount.toLocaleString()} ج.م</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 14px;">
+            <span style="color: #64748b; font-weight: bold;">المتبقي الآجل:</span> 
+            <span style="font-weight: bold; color: #e11d48;">${inv.remaining_amount.toLocaleString()} ج.م</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 30px; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+          <p style="margin: 0 0 5px 0; font-size: 14px; font-weight: bold; color: #334155;">توقيع المندوب المستلم</p>
+          <p style="margin: 0; font-size: 16px; color: #94a3b8;">....................................</p>
+          <p style="margin: 20px 0 0 0; font-size: 11px; color: #94a3b8; font-weight: bold;">تم الإنشاء بواسطة نظام إدارة المزرعة 🚀</p>
+        </div>
+      </div>
+    `;
+  };
+
+  // 🖨️ دالة الطباعة الاحترافية (Iframe)
+  const handlePrint = (inv) => {
+    const htmlContent = `
       <html dir="rtl">
         <head>
-          <title>فاتورة مبيعات #${inv.local_id.split('_')[1] || inv.local_id}</title>
-          <style>
-            body { font-family: 'Courier New', Courier, monospace; padding: 20px; max-width: 300px; margin: auto; color: #000; }
-            h2 { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; font-size: 18px; }
-            .line { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; font-weight: bold; }
-            .divider { border-bottom: 1px dashed #000; margin: 15px 0; }
-            .total { font-size: 16px; font-weight: 900; }
-            .footer { text-align: center; font-size: 12px; margin-top: 20px; border-top: 1px dashed #000; padding-top: 10px; }
-          </style>
+          <title>فاتورة #${inv.local_id.split('_')[1] || inv.local_id}</title>
+          <style>body { margin: 0; padding: 0; background: #fff; }</style>
         </head>
-        <body>
-          <h2>إيصال تسليم مبيعات</h2>
-          <div class="line"><span>رقم الفاتورة:</span> <span>${inv.local_id.split('_')[1] || inv.local_id}</span></div>
-          <div class="line"><span>التاريخ:</span> <span>${invDate.toLocaleDateString('ar-EG')}</span></div>
-          <div class="line"><span>الوقت:</span> <span>${invDate.toLocaleTimeString('ar-EG')}</span></div>
-          <div class="divider"></div>
-          <div class="line"><span>الشركة/العميل:</span> <span>${companyName}</span></div>
-          <div class="line"><span>المندوب المستلم:</span> <span>${repName}</span></div>
-          <div class="divider"></div>
-          <div class="line"><span>الكمية (أطباق):</span> <span>${quantity}</span></div>
-          <div class="divider"></div>
-          <div class="line total"><span>الإجمالي:</span> <span>${inv.total_amount.toLocaleString()} ج.م</span></div>
-          <div class="line"><span>المدفوع نقداً:</span> <span>${inv.paid_amount.toLocaleString()} ج.م</span></div>
-          <div class="line"><span>المتبقي الآجل:</span> <span>${inv.remaining_amount.toLocaleString()} ج.م</span></div>
-          <div class="footer">توقيع المستلم: .....................</div>
-        </body>
+        <body>${buildReceiptHTML(inv)}</body>
       </html>
     `;
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+    iframe.contentWindow.focus();
+    
     setTimeout(() => {
-      printWindow.print();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
     }, 500);
   };
 
-  // فلترة الشركات والفواتير حسب البحث
+  // 🖼️ دالة توليد الإيصال كصورة ومشاركته
+  const handleShareAsImage = async (inv) => {
+    try {
+      setSharingId(inv._id);
+      
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '-9999px';
+      container.innerHTML = buildReceiptHTML(inv);
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, {
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+
+      document.body.removeChild(container);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) throw new Error('فشل إنشاء الصورة');
+        const file = new File([blob], `Invoice_${inv.local_id}.png`, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'إيصال تسليم',
+            text: `إيصال استلام بضاعة - شركة ${inv.merchant_id?.company_name || 'مبيعات'}`
+          });
+        } else {
+           const url = URL.createObjectURL(blob);
+           const a = document.createElement('a');
+           a.href = url;
+           a.download = `Invoice_${inv.local_id}.png`;
+           a.click();
+           URL.revokeObjectURL(url);
+           showAlert.success('تم الحفظ', 'تم تحميل الإيصال بنجاح.');
+        }
+      }, 'image/png');
+
+    } catch (err) {
+      console.error(err);
+      showAlert.error('خطأ', 'تعذر معالجة ومشاركة الإيصال');
+    } finally {
+      setSharingId(null);
+    }
+  };
+
   const filteredMerchants = Object.keys(invoicesByMerchant).filter(merchantName => {
-    // التحقق من اسم الشركة
     if (merchantName.toLowerCase().includes(searchTerm.toLowerCase())) return true;
-    
-    // أو التحقق من وجود الفاتورة أو المندوب داخل الشركة
     return invoicesByMerchant[merchantName].some(inv => 
       (inv.local_id || '').includes(searchTerm) || 
       (inv.notes || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -152,13 +258,12 @@ const SupervisorInvoices = () => {
 
   return (
     <div className="space-y-6 pb-20 max-w-5xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Receipt className="w-6 h-6 text-indigo-500" /> أرشيف الفواتير
           </h1>
-          <p className="text-sm font-bold text-slate-500 mt-1">استعراض وطباعة الفواتير مقسمة حسب الشركات</p>
+          <p className="text-sm font-bold text-slate-500 mt-1">استعراض ومشاركة إيصالات التسليم للشركات</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative">
@@ -192,17 +297,16 @@ const SupervisorInvoices = () => {
         <div className="space-y-4">
           {filteredMerchants.map(merchantName => {
             const isExpanded = expandedMerchants.includes(merchantName);
-            // فلترة الفواتير داخل الشركة إذا كان هناك بحث نشط
             const merchantInvoices = invoicesByMerchant[merchantName].filter(inv => 
               searchTerm === '' ||
               merchantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
               (inv.local_id || '').includes(searchTerm) || 
-              (inv.notes || '').toLowerCase().includes(searchTerm.toLowerCase())
+              (inv.notes || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (inv.representative_name || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
 
             return (
               <div key={merchantName} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
-                {/* Accordion Header */}
                 <button onClick={() => toggleMerchantAccordion(merchantName)} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 p-2.5 rounded-xl">
@@ -210,7 +314,7 @@ const SupervisorInvoices = () => {
                     </div>
                     <div className="text-right">
                       <h3 className="font-black text-slate-800 dark:text-white text-base">{merchantName}</h3>
-                      <p className="text-xs font-bold text-slate-500 mt-0.5">يوجد {merchantInvoices.length} فواتير مسجلة</p>
+                      <p className="text-xs font-bold text-slate-500 mt-0.5">يوجد {merchantInvoices.length} إيصالات تسليم</p>
                     </div>
                   </div>
                   <div className="text-slate-400">
@@ -218,7 +322,6 @@ const SupervisorInvoices = () => {
                   </div>
                 </button>
 
-                {/* Accordion Body */}
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-slate-100 dark:border-slate-800">
@@ -243,13 +346,13 @@ const SupervisorInvoices = () => {
                                   </span>
                                 </div>
 
-                                <div className="space-y-2 mb-4">
+                                <div className="space-y-2 mb-5">
                                   <div className="flex justify-between items-center text-sm">
                                     <span className="text-slate-500 flex items-center gap-1.5"><UserCircle className="w-4 h-4"/> المندوب:</span>
                                     <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">{repName}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-sm">
-                                    <span className="text-slate-500">إجمالي الفاتورة:</span>
+                                    <span className="text-slate-500">إجمالي المطلوب:</span>
                                     <span className="font-black text-slate-900 dark:text-white">{inv.total_amount.toLocaleString()} ج.م</span>
                                   </div>
                                   {inv.remaining_amount > 0 && (
@@ -261,9 +364,24 @@ const SupervisorInvoices = () => {
                                 </div>
                               </div>
 
-                              <button onClick={() => handlePrint(inv)} className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors font-bold text-sm dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">
-                                <Printer className="w-4 h-4" /> طباعة
-                              </button>
+                              {/* 🚀 أزرار الإجراءات */}
+                              <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                                <button 
+                                  onClick={() => handleShareAsImage(inv)} 
+                                  disabled={sharingId === inv._id} 
+                                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors font-bold text-xs dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 dark:text-emerald-400 disabled:opacity-50"
+                                >
+                                  {sharingId === inv._id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /> مشاركة واتساب</>}
+                                </button>
+                                
+                                <button 
+                                  onClick={() => handlePrint(inv)} 
+                                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-colors font-bold text-xs dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 dark:text-indigo-400"
+                                >
+                                  <Printer className="w-4 h-4" /> طباعة إيصال
+                                </button>
+                              </div>
+
                             </motion.div>
                            )
                         })}
