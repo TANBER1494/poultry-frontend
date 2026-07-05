@@ -10,6 +10,7 @@ import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
 import inventoryService from '../../services/inventoryService';
 import dailyLogService from '../../services/dailyLogService';
+import invoiceService from '../../services/invoiceService'; // 🚀 استيراد خدمة الفواتير
 import { showAlert } from '../../utils/alert';
 
 const DailyLogs = () => {
@@ -22,9 +23,10 @@ const DailyLogs = () => {
   const [activeCycles, setActiveCycles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
   const [generalItems, setGeneralItems] = useState([]); 
-  const [productItems, setProductItems] = useState([]); // 🚀 لتخزين البيض
+  const [productItems, setProductItems] = useState([]); 
   
   const [logsByDate, setLogsByDate] = useState({});
+  const [salesByDate, setSalesByDate] = useState({}); // 🚀 حالة جديدة لتخزين مبيعات كل يوم
   const [expandedDates, setExpandedDates] = useState([]); 
   const [searchDate, setSearchDate] = useState(''); 
   
@@ -79,13 +81,13 @@ const DailyLogs = () => {
         const invItems = inventoryRes.items || [];
         setFeedItems(invItems.filter(item => item.category === 'FEED'));
         setGeneralItems(invItems.filter(item => !['FEED', 'PRODUCT'].includes(item.category)));
-        setProductItems(invItems.filter(item => item.category === 'PRODUCT')); // 🚀 جلب البيض
+        setProductItems(invItems.filter(item => item.category === 'PRODUCT')); 
 
         const initialBulk = {};
         active.forEach(c => {
           initialBulk[c._id] = {
             mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', 
-            medication_item_id: '', medication_quantity: '', notes: ''
+            medication_item_id: '', medication_quantity: '' // 🚀 إزالة الملاحظات من الفورم
           };
         });
         setBulkData(initialBulk);
@@ -94,6 +96,7 @@ const DailyLogs = () => {
           await fetchAllActiveLogs(active, farmId);
         } else {
           setLogsByDate({});
+          setSalesByDate({});
         }
       }
     } catch (error) {
@@ -106,9 +109,27 @@ const DailyLogs = () => {
   const fetchAllActiveLogs = async (cycles, farmId) => {
     try {
       setIsLogsLoading(true);
-      const promises = cycles.map(c => dailyLogService.getCycleDailyLogs(c._id, farmId));
-      const results = await Promise.all(promises);
       
+      // 🚀 جلب اليوميات والمبيعات بالتوازي في نفس الوقت للسرعة
+      const promises = cycles.map(c => dailyLogService.getCycleDailyLogs(c._id, farmId));
+      promises.push(invoiceService.getInvoices(farmId, { invoice_type: 'SALE' })); 
+      
+      const results = await Promise.all(promises);
+      const invoicesRes = results.pop(); // الفواتير هي آخر وعد تم إضافته
+      
+      // 🚀 تصفية فواتير البيض وتجميعها حسب التاريخ
+      const eggInvoicesOnly = (invoicesRes.invoices || []).filter(inv => 
+        inv.items && inv.items.some(item => item.item_name.includes('بيض') || item.item_name.includes('طبق'))
+      );
+      
+      const groupedSales = eggInvoicesOnly.reduce((acc, inv) => {
+        const d = new Date(inv.invoice_date).toISOString().split('T')[0];
+        if(!acc[d]) acc[d] = [];
+        acc[d].push(inv);
+        return acc;
+      }, {});
+      setSalesByDate(groupedSales); // تخزين المبيعات المنظمة
+
       let combined = [];
       results.forEach((res, index) => {
         const cycleLogs = res.logs || [];
@@ -116,18 +137,18 @@ const DailyLogs = () => {
         cycleLogs.forEach(log => combined.push({ ...log, cycleDetails: cycleInfo }));
       });
 
-      const grouped = combined.reduce((acc, log) => {
+      const groupedLogs = combined.reduce((acc, log) => {
         const d = new Date(log.log_date).toISOString().split('T')[0];
         if(!acc[d]) acc[d] = [];
         acc[d].push(log);
         return acc;
       }, {});
 
-      setLogsByDate(grouped);
-      const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
+      setLogsByDate(groupedLogs);
+      const sortedDates = Object.keys(groupedLogs).sort((a, b) => new Date(b) - new Date(a));
       if (sortedDates.length > 0) setExpandedDates([sortedDates[0]]);
     } catch (error) {
-      showAlert.error('خطأ', 'تعذر جلب السجلات اليومية');
+      showAlert.error('خطأ', 'تعذر جلب السجلات والمبيعات');
     } finally {
       setIsLogsLoading(false);
     }
@@ -162,7 +183,7 @@ const DailyLogs = () => {
       const row = bulkData[cycle._id];
       const age = calculateAge(cycle.start_date, globalLogDate);
       
-      const hasData = row.mortality_count || row.feed_consumed_bags || row.egg_trays_produced || row.notes || row.medication_quantity;
+      const hasData = row.mortality_count || row.feed_consumed_bags || row.egg_trays_produced || row.medication_quantity;
       if (!hasData || age < 1) continue;
 
       if (row.feed_consumed_bags > 0 && !globalFeedItem) {
@@ -189,7 +210,7 @@ const DailyLogs = () => {
         feed_consumed_bags: row.feed_consumed_bags,
         egg_trays_produced: row.egg_trays_produced,
         consumed_medications: consumed_medications,
-        notes: row.notes
+        notes: '' // 🚀 إرسالها فارغة لعدم الحاجة إليها
       });
     }
 
@@ -203,7 +224,7 @@ const DailyLogs = () => {
       
       const resetBulk = {};
       activeCycles.forEach(c => {
-        resetBulk[c._id] = { mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', medication_item_id: '', medication_quantity: '', notes: '' };
+        resetBulk[c._id] = { mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', medication_item_id: '', medication_quantity: '' };
       });
       setBulkData(resetBulk);
       
@@ -215,23 +236,34 @@ const DailyLogs = () => {
     }
   };
 
-  // 🚀 جلب إجمالي البيض في المخزن
   const getTotalEggsInStock = () => productItems.reduce((acc, item) => acc + (item.stock_quantity || 0), 0);
 
-  // 🖨️ دالة الطباعة بالـ Iframe
+  // 🖨️ دالة الطباعة بالـ Iframe (محدثة لدعم المبيعات المدمجة)
   const handlePrintDay = (dateStr, dayLogs) => {
     const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     let tableRows = '';
     let totalDayFeed = 0;
     let totalDayDead = 0;
+    const daySales = salesByDate[dateStr] || [];
 
-    dayLogs.forEach(log => {
+    dayLogs.forEach((log, index) => {
       totalDayFeed += (Number(log.feed_consumed_bags) || 0);
       totalDayDead += (Number(log.mortality_count) || 0);
       
       const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
       const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+      
+      // 🚀 دمج خلية المبيعات رأسياً في أول صف فقط
+      let salesCell = '';
+      if (index === 0) {
+        const salesText = daySales.length > 0 
+          ? daySales.map(s => `<div style="margin-bottom:8px; border-bottom:1px dashed #cbd5e1; padding-bottom:5px;"><b>${s.merchant_id?.company_name || 'عميل'}</b><br/><span style="color:#059669;">${s.items?.reduce((acc, it)=>acc+(it.quantity||0),0)} طبق</span><br/><span style="color:#4f46e5;">${s.paid_amount.toLocaleString()} ج</span></div>`).join('')
+          : '<span style="color:#94a3b8;">لا توجد مبيعات</span>';
+        
+        salesCell = `<td rowspan="${dayLogs.length}" style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px; vertical-align: top; background-color: #f8fafc;">${salesText}</td>`;
+      }
+
       tableRows += `
         <tr>
           <td>${log.cycleDetails?.barn_id?.name || '-'} <br><small>${typeLabel}</small></td>
@@ -240,12 +272,11 @@ const DailyLogs = () => {
           <td>${log.feed_consumed_bags || '-'}</td>
           <td>${log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
           <td>${meds || '-'}</td>
-          <td>${log.notes || '-'}</td>
+          ${salesCell}
         </tr>
       `;
     });
 
-    // 🚀 إضافة صف الإجمالي للطباعة
     tableRows += `
       <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #94a3b8;">
         <td colspan="2" style="text-align: center; color: #1e293b;">🏢 إجمالي المخزن / اليومية</td>
@@ -281,7 +312,7 @@ const DailyLogs = () => {
                 <th>العلف (شكاير)</th>
                 <th>البيض (أطباق)</th>
                 <th>أدوية مسحوبة</th>
-                <th>ملاحظات</th>
+                <th>المبيعات (تلقائي)</th>
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
@@ -317,12 +348,13 @@ const DailyLogs = () => {
     try {
       setIsSharing(true);
       const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const daySales = salesByDate[dateStr] || [];
 
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.left = '-9999px';
       container.style.top = '-9999px';
-      container.style.width = '800px'; 
+      container.style.width = '850px'; 
       container.style.backgroundColor = '#ffffff';
       container.style.padding = '30px';
       container.style.direction = 'rtl';
@@ -333,12 +365,21 @@ const DailyLogs = () => {
       let totalDayFeed = 0;
       let totalDayDead = 0;
 
-      dayLogs.forEach(log => {
+      dayLogs.forEach((log, index) => {
           totalDayFeed += (Number(log.feed_consumed_bags) || 0);
           totalDayDead += (Number(log.mortality_count) || 0);
 
           const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
           const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+          
+          let salesCell = '';
+          if (index === 0) {
+            const salesText = daySales.length > 0 
+              ? daySales.map(s => `<div style="margin-bottom:8px; border-bottom:1px dashed #cbd5e1; padding-bottom:5px;"><b>${s.merchant_id?.company_name || 'عميل'}</b><br/><span style="color:#059669;">${s.items?.reduce((acc, it)=>acc+(it.quantity||0),0)} طبق</span><br/><span style="color:#4f46e5;">${s.paid_amount.toLocaleString()} ج</span></div>`).join('')
+              : '<span style="color:#94a3b8;">لا توجد مبيعات</span>';
+            salesCell = `<td rowspan="${dayLogs.length}" style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px; vertical-align: top; background-color: #f8fafc;">${salesText}</td>`;
+          }
+
           tableRows += `
             <tr>
               <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold;">${log.cycleDetails?.barn_id?.name || '-'} <br><small style="color:#64748b; font-weight:normal;">${typeLabel}</small></td>
@@ -347,12 +388,11 @@ const DailyLogs = () => {
               <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #d97706;">${log.feed_consumed_bags || '-'}</td>
               <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #059669;">${log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
               <td style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px;">${meds || '-'}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px;">${log.notes || '-'}</td>
+              ${salesCell}
             </tr>
           `;
       });
 
-      // 🚀 صف الإجمالي للصورة
       tableRows += `
         <tr style="background-color: #f1f5f9; border-top: 2px solid #94a3b8;">
           <td colspan="2" style="border: 1px solid #cbd5e1; padding: 12px; text-align: center; font-weight: bold; color: #1e293b;">🏢 إجمالي المخزن / اليومية</td>
@@ -374,7 +414,7 @@ const DailyLogs = () => {
               <th style="background-color: #fffbeb; border: 1px solid #cbd5e1; padding: 12px; color: #d97706;">العلف (شكاير)</th>
               <th style="background-color: #ecfdf5; border: 1px solid #cbd5e1; padding: 12px; color: #059669;">البيض (أطباق)</th>
               <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">أدوية مسحوبة</th>
-              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">ملاحظات</th>
+              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #4f46e5;">مبيعات اليوم</th>
             </tr>
           </thead>
           <tbody>${tableRows}</tbody>
@@ -472,8 +512,8 @@ const DailyLogs = () => {
           {sortedAndFilteredDates.map(dateStr => {
             const isExpanded = expandedDates.includes(dateStr);
             const dayLogs = logsByDate[dateStr];
+            const daySales = salesByDate[dateStr] || [];
             
-            // حساب الإجماليات للصفحة الرئيسية
             const totalDayFeed = dayLogs.reduce((sum, log) => sum + (Number(log.feed_consumed_bags) || 0), 0);
             const totalDayDead = dayLogs.reduce((sum, log) => sum + (Number(log.mortality_count) || 0), 0);
 
@@ -514,11 +554,11 @@ const DailyLogs = () => {
                               <th className="p-3 text-amber-600 border-l border-slate-100 dark:border-slate-800">علف (شكاير)</th>
                               <th className="p-3 text-emerald-600 border-l border-slate-100 dark:border-slate-800">بيض (أطباق)</th>
                               <th className="p-3 text-indigo-500 border-l border-slate-100 dark:border-slate-800 min-w-[150px]">أدوية ومستلزمات</th>
-                              <th className="p-3 min-w-[150px]">ملاحظات</th>
+                              <th className="p-3 text-indigo-600 min-w-[160px]">المبيعات (تلقائي)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50 text-[13px] font-medium text-slate-700 dark:text-slate-300">
-                            {dayLogs.map(log => (
+                            {dayLogs.map((log, index) => (
                               <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
                                 <td className="p-3 border-l border-slate-50 dark:border-slate-800/50 bg-white dark:bg-slate-900">
                                   <div className="font-black text-slate-800 dark:text-white leading-tight">{log.cycleDetails?.barn_id?.name || '-'}</div>
@@ -538,10 +578,28 @@ const DailyLogs = () => {
                                     </div>
                                   ) : '-'}
                                 </td>
-                                <td className="p-3 text-[11px] truncate max-w-[150px]" title={log.notes}>{log.notes || '-'}</td>
+                                
+                                {/* 🚀 دمج عمود المبيعات رأسياً في أول صف فقط */}
+                                {index === 0 && (
+                                  <td rowSpan={dayLogs.length} className="p-3 align-top bg-slate-50/50 dark:bg-slate-800/20 border-l border-slate-100 dark:border-slate-800/50">
+                                    {daySales.length > 0 ? (
+                                      <div className="flex flex-col gap-2">
+                                        {daySales.map((s, i) => (
+                                          <div key={i} className="text-[11px] bg-indigo-50 text-indigo-800 border border-indigo-100 p-2 rounded dark:bg-indigo-900/30 dark:border-indigo-800/50 dark:text-indigo-300">
+                                            <div className="font-black text-indigo-900 dark:text-indigo-200">{s.merchant_id?.company_name || 'عميل'}</div>
+                                            <div className="flex justify-between mt-1 items-center">
+                                              <span className="font-bold text-emerald-600 dark:text-emerald-400">{s.items?.reduce((acc, it)=>acc+(it.quantity||0),0)} طبق</span>
+                                              <span className="font-black bg-indigo-100 dark:bg-indigo-900/50 px-1.5 rounded">{s.paid_amount.toLocaleString()} ج</span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : <span className="text-[11px] font-bold text-slate-400 block text-center mt-4">لا يوجد مبيعات</span>}
+                                  </td>
+                                )}
+
                               </tr>
                             ))}
-                            {/* 🚀 صف الإجمالي للمخزن */}
                             <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-200 dark:border-slate-700">
                               <td className="p-3 text-center font-black text-slate-800 dark:text-white border-l border-slate-200 dark:border-slate-700">
                                 <div className="flex items-center justify-center gap-2">
@@ -603,7 +661,7 @@ const DailyLogs = () => {
 
                     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                       <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-right text-sm min-w-[800px]">
+                        <table className="w-full text-right text-sm min-w-[700px]">
                           <thead className="bg-slate-100 dark:bg-slate-800/80 text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
                             <tr>
                               <th className="p-3 w-48 sticky right-0 bg-slate-100 dark:bg-slate-800 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">العنبر (العمر)</th>
@@ -611,7 +669,6 @@ const DailyLogs = () => {
                               <th className="p-3 w-28 text-amber-600">علف (شكاير)</th>
                               <th className="p-3 w-28 text-emerald-600">إنتاج (أطباق)</th>
                               <th className="p-3 w-56 text-indigo-600">صرف أدوية (من المخزن)</th>
-                              <th className="p-3 w-48">ملاحظات العنبر</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -657,12 +714,9 @@ const DailyLogs = () => {
                                         {generalItems.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
                                       </select>
                                       {bulkData[cycle._id]?.medication_item_id && (
-                                        <input type="number" step="0.01" min="0" placeholder="الكمية المسحوبة" value={bulkData[cycle._id]?.medication_quantity} onChange={e => handleBulkChange(cycle._id, 'medication_quantity', e.target.value)} className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-[11px] font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                                        <input type="number" step="0.01" min="0" placeholder="الكمية المسحوبة (لتر/كجم)" value={bulkData[cycle._id]?.medication_quantity} onChange={e => handleBulkChange(cycle._id, 'medication_quantity', e.target.value)} className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-[11px] font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
                                       )}
                                     </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <input type="text" placeholder="ملاحظات..." disabled={age < 1} value={bulkData[cycle._id]?.notes} onChange={e => handleBulkChange(cycle._id, 'notes', e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white disabled:opacity-50" />
                                   </td>
                                 </tr>
                               );
