@@ -66,7 +66,6 @@ const SupervisorInventory = () => {
       ]);
 
       if (isMounted) {
-        // 🚀 ترتيب العنابر أبجدياً ورقمياً بذكاء
         const active = (cyclesRes.cycles || []).filter((c) => c.status === 'ACTIVE');
         active.sort((a, b) => {
           const nameA = a.barn_id?.name || '';
@@ -318,9 +317,6 @@ const SupervisorInventory = () => {
                     {custodyRows.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="font-black text-slate-800 dark:text-white flex items-center gap-1.5">
-                            <Wheat className="w-4 h-4 text-amber-500" /> {row.barnName}
-                          </div>
                           <div className="text-[10px] font-bold text-slate-500 mt-0.5 pr-5.5">دورة: {row.cycleName}</div>
                         </td>
                         <td className="px-4 py-3">
