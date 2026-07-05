@@ -55,7 +55,12 @@ const inventoryService = {
   produceFeed: async (data) => {
     const response = await api.post(`${INVENTORY_ENDPOINT}/produce-feed`, data);
     return response.data;
-  }
+  },
+
+  getPendingMovements: async (farmId) => {
+    const response = await api.get(`${INVENTORY_ENDPOINT}/farms/${farmId}/movements/pending`);
+    return response.data;
+  },
 };
 
 export default inventoryService;
