@@ -17,8 +17,10 @@ import {
   Package,
   Printer,
   User,
-  Banknote
+  Banknote,
+  Share2
 } from 'lucide-react';
+import html2canvas from 'html2canvas'; // 🚀 استيراد مكتبة الصور
 import cycleService from '../../services/cycleService';
 import dailyLogService from '../../services/dailyLogService';
 import { showAlert } from '../../utils/alert';
@@ -30,6 +32,7 @@ const CycleDetails = () => {
   const [cycle, setCycle] = useState(null);
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSharing, setIsSharing] = useState(false); // 🚀 حالة التحميل للصورة
   const [activeTab, setActiveTab] = useState('OVERVIEW');
 
   useEffect(() => {
@@ -99,63 +102,175 @@ const CycleDetails = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
+  // 🖨️ دالة الطباعة الاحترافية بالـ Iframe
   const handlePrintLogs = () => {
-    const printContent = `
+    const typeLabel = cycle.type === 'LAYER' ? 'بياض' : 'تسمين';
+    let tableRows = '';
+    
+    logs.forEach(log => {
+      const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+      tableRows += `
+        <tr>
+          <td>${new Date(log.log_date).toLocaleDateString('ar-EG')} <br><small>عمر ${log.age_in_days} يوم</small></td>
+          <td style="color: #e11d48; font-weight: bold;">${log.mortality_count || '-'}</td>
+          <td style="color: #d97706; font-weight: bold;">${log.feed_consumed_bags || '-'}</td>
+          ${cycle.type === 'LAYER' ? `<td style="color: #059669; font-weight: bold;">${log.egg_trays_produced || '-'}</td>` : ''}
+          <td>${meds || '-'}</td>
+          <td>${log.recorded_by?.name || '-'}</td>
+          <td>${log.notes || '-'}</td>
+        </tr>
+      `;
+    });
+
+    const htmlContent = `
       <html dir="rtl">
         <head>
-          <title>يوميات دورة ${cycle.name}</title>
+          <title>سجل يوميات - ${cycle.name}</title>
           <style>
-            body { font-family: 'Tahoma', Arial, sans-serif; padding: 20px; color: #333; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; text-align: right; }
-            th, td { border: 1px solid #ddd; padding: 8px; }
-            th { background-color: #4f46e5; color: white; }
-            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
+            body { font-family: Tahoma, Arial, sans-serif; padding: 20px; color: #333; direction: rtl; }
+            h2 { text-align: center; color: #1e1b4b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 5px; }
+            h3 { text-align: center; color: #64748b; font-size: 14px; margin-top: 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; text-align: right; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; color: #475569; }
+            td { border: 1px solid #cbd5e1; padding: 10px; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #94a3b8; font-weight: bold; }
           </style>
         </head>
         <body>
-          <div class="header">
-            <h2>سجل المتابعة اليومي والإنتاج</h2>
-            <h3>دورة: ${cycle.name} | العنبر: ${cycle.barn_id?.name}</h3>
-          </div>
+          <h2>سجل الاستهلاك والإنتاج</h2>
+          <h3>دورة: ${cycle.name} | العنبر: ${cycle.barn_id?.name} (${typeLabel})</h3>
           <table>
             <thead>
               <tr>
                 <th>التاريخ (العمر)</th>
                 <th>النافق</th>
-                <th>علف (شكاير)</th>
-                ${cycle.type === 'LAYER' ? '<th>إنتاج (أطباق)</th>' : ''}
-                <th>أدوية ومستلزمات</th>
+                <th>العلف (شكاير)</th>
+                ${cycle.type === 'LAYER' ? '<th>الإنتاج (أطباق)</th>' : ''}
+                <th>أدوية مسحوبة</th>
                 <th>المشرف</th>
                 <th>ملاحظات</th>
               </tr>
             </thead>
-            <tbody>
-              ${logs
-                .map((log) => {
-                  const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
-                  return `
-                    <tr>
-                      <td>${new Date(log.log_date).toLocaleDateString('ar-EG')} (عمر ${log.age_in_days} يوم)</td>
-                      <td style="color: red; font-weight: bold;">${log.mortality_count || 0}</td>
-                      <td>${log.feed_consumed_bags || 0}</td>
-                      ${cycle.type === 'LAYER' ? `<td>${log.egg_trays_produced || 0}</td>` : ''}
-                      <td>${meds || '-'}</td>
-                      <td>${log.recorded_by?.name || 'غير محدد'}</td>
-                      <td>${log.notes || '-'}</td>
-                    </tr>
-                  `;
-                }).join('')}
-            </tbody>
+            <tbody>${tableRows}</tbody>
           </table>
-          <div class="footer"><p>نظام إدارة المزارع - تقرير الاستهلاك والإنتاج</p></div>
+          <div class="footer">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')} | تم الإنشاء عبر نظام إدارة المزرعة 🚀</div>
         </body>
       </html>
     `;
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+    iframe.contentWindow.focus();
+    
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 500);
+  };
+
+  // 🖼️ دالة توليد الصورة والمشاركة عبر واتساب
+  const handleShareAsImage = async () => {
+    try {
+      setIsSharing(true);
+      const typeLabel = cycle.type === 'LAYER' ? 'بياض' : 'تسمين';
+
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '-9999px';
+      container.style.width = '850px'; 
+      container.style.backgroundColor = '#ffffff';
+      container.style.padding = '30px';
+      container.style.direction = 'rtl';
+      container.style.fontFamily = 'Tahoma, Arial, sans-serif';
+      container.style.color = '#333';
+
+      let tableRows = '';
+      logs.forEach((log) => {
+          const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+          
+          tableRows += `
+            <tr>
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold;">${new Date(log.log_date).toLocaleDateString('ar-EG')} <br><small style="color:#64748b; font-weight:normal;">عمر ${log.age_in_days} يوم</small></td>
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #e11d48;">${log.mortality_count || '-'}</td>
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #d97706;">${log.feed_consumed_bags || '-'}</td>
+              ${cycle.type === 'LAYER' ? `<td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #059669;">${log.egg_trays_produced || '-'}</td>` : ''}
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px;">${meds || '-'}</td>
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px;">${log.recorded_by?.name || '-'}</td>
+              <td style="border: 1px solid #cbd5e1; padding: 12px; font-size: 12px;">${log.notes || '-'}</td>
+            </tr>
+          `;
+      });
+
+      container.innerHTML = `
+        <h2 style="text-align: center; color: #1e1b4b; border-bottom: 3px solid #e2e8f0; padding-bottom: 10px; font-size: 24px; margin-bottom: 5px;">📊 سجل استهلاك وإنتاج العنبر</h2>
+        <h3 style="text-align: center; color: #64748b; font-size: 16px; margin-top: 0; margin-bottom: 25px;">دورة: ${cycle.name} | العنبر: ${cycle.barn_id?.name} (${typeLabel})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 25px; font-size: 15px; text-align: right;">
+          <thead>
+            <tr>
+              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">التاريخ (العمر)</th>
+              <th style="background-color: #fef1f2; border: 1px solid #cbd5e1; padding: 12px; color: #e11d48;">النافق</th>
+              <th style="background-color: #fffbeb; border: 1px solid #cbd5e1; padding: 12px; color: #d97706;">العلف (شكاير)</th>
+              ${cycle.type === 'LAYER' ? `<th style="background-color: #ecfdf5; border: 1px solid #cbd5e1; padding: 12px; color: #059669;">البيض (أطباق)</th>` : ''}
+              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">أدوية مسحوبة</th>
+              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">المشرف</th>
+              <th style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; color: #475569;">ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+        <div style="margin-top: 40px; text-align: center; font-size: 13px; color: #94a3b8; font-weight: bold;">تم الإنشاء والمشاركة عبر نظام إدارة المزرعة 🚀</div>
+      `;
+
+      document.body.appendChild(container);
+
+      const canvas = await html2canvas(container, {
+        scale: 2, 
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+
+      document.body.removeChild(container);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) throw new Error('فشل إنشاء الصورة');
+        const file = new File([blob], `CycleLog_${cycle.name}.png`, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'سجل يوميات الدورة',
+            text: `سجل يوميات دورة ${cycle.name}`
+          });
+        } else {
+           const url = URL.createObjectURL(blob);
+           const a = document.createElement('a');
+           a.href = url;
+           a.download = `CycleLog_${cycle.name}.png`;
+           a.click();
+           URL.revokeObjectURL(url);
+           showAlert.success('تم الحفظ', 'تم تحميل الصورة بنجاح للمشاركة اليدوية.');
+        }
+      }, 'image/png');
+
+    } catch (err) {
+      console.error(err);
+      showAlert.error('خطأ', 'تعذر معالجة ومشاركة الصورة');
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   if (isLoading) {
@@ -173,7 +288,6 @@ const CycleDetails = () => {
   const deadBirds = cycle.total_dead_birds || 0;
   const totalExpenses = cycle.total_expenses || 0;
   
-  // 🚀 تجميع الإنتاج الكلي من اليوميات بدلاً من الاعتماد على المبيعات
   const totalProducedEggs = logs.reduce((sum, log) => sum + (Number(log.egg_trays_produced) || 0), 0);
 
   const mortalityRate = initialBirds > 0 ? ((deadBirds / initialBirds) * 100).toFixed(2) : 0;
@@ -330,9 +444,16 @@ const CycleDetails = () => {
               </h3>
               <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">تم تسجيل {logs.length} يومية</p>
             </div>
-            <button onClick={handlePrintLogs} disabled={logs.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50">
-              <Printer className="w-4 h-4" /> <span className="hidden sm:inline">طباعة السجل</span>
-            </button>
+            
+            {/* 🚀 أزرار الطباعة والمشاركة */}
+            <div className="flex items-center gap-2">
+              <button onClick={handleShareAsImage} disabled={isSharing || logs.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/40 dark:text-emerald-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50">
+                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Share2 className="w-4 h-4" /> <span className="hidden sm:inline">مشاركة كصورة</span></>}
+              </button>
+              <button onClick={handlePrintLogs} disabled={logs.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50">
+                <Printer className="w-4 h-4" /> <span className="hidden sm:inline">طباعة السجل</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
