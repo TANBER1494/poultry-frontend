@@ -66,7 +66,15 @@ const SupervisorInventory = () => {
       ]);
 
       if (isMounted) {
-        setActiveCycles((cyclesRes.cycles || []).filter((c) => c.status === 'ACTIVE'));
+        // 🚀 ترتيب العنابر أبجدياً ورقمياً بذكاء
+        const active = (cyclesRes.cycles || []).filter((c) => c.status === 'ACTIVE');
+        active.sort((a, b) => {
+          const nameA = a.barn_id?.name || '';
+          const nameB = b.barn_id?.name || '';
+          return nameA.localeCompare(nameB, 'ar', { numeric: true });
+        });
+        setActiveCycles(active);
+
         setInventoryItems(inventoryRes.items || []);
         setPendingMovements(pendingRes.movements || []);
       }
@@ -151,7 +159,6 @@ const SupervisorInventory = () => {
     }
   };
 
-  // 🚀 تحضير صفوف جدول العهدة لتكون مدمجة وسريعة
   const custodyRows = [];
   activeCycles.forEach((cycle) => {
     if (cycle.feed_custody && cycle.feed_custody.length > 0) {
@@ -160,8 +167,7 @@ const SupervisorInventory = () => {
           id: `${cycle._id}_${custody._id}`,
           barnName: cycle.barn_id?.name || 'عنبر غير محدد',
           cycleName: cycle.name,
-          itemName: custody.item_id?.name || 'صنف غير محدد',
-          category: custody.item_id?.category,
+          itemName: custody.item_id?.name || 'علف غير محدد',
           quantity: custody.quantity,
           unit: custody.item_id?.unit
         });
@@ -187,7 +193,7 @@ const SupervisorInventory = () => {
               <Factory className="h-4 w-4" /> إنتاج مدشة
             </button>
           )}
-          <button onClick={() => setIsTransferModalOpen(true)} disabled={activeCycles.length === 0 || inventoryItems.length === 0} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-sm disabled:opacity-50">
+          <button onClick={() => setIsTransferModalOpen(true)} disabled={activeCycles.length === 0 || feedItems.length === 0} className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-sm disabled:opacity-50">
             <ArrowDownToLine className="h-5 w-5" /> صرف عهدة لعنبر
           </button>
         </div>
@@ -225,7 +231,7 @@ const SupervisorInventory = () => {
             </section>
           )}
 
-          {/* 🛡️ القسم الأول: المخزن الرئيسي (تم نقله للأعلى) */}
+          {/* 🛡️ القسم الأول: المخزن الرئيسي */}
           <section>
             <h2 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <Package className="w-5 h-5 text-indigo-500" /> المخزن الرئيسي
@@ -293,7 +299,7 @@ const SupervisorInventory = () => {
             </div>
           </section>
 
-          {/* 🛡️ القسم الثاني: عهدة العنابر (تم تحويله لجدول أنيق ومدمج) */}
+          {/* 🛡️ القسم الثاني: عهدة العنابر (بدون عمود الصنف ومدمجة) */}
           <section>
             <h2 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <Bird className="w-5 h-5 text-emerald-500" /> عهدة العنابر النشطة (الرصيد الداخلي)
@@ -305,26 +311,21 @@ const SupervisorInventory = () => {
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="px-4 py-3 whitespace-nowrap">العنبر (الدورة)</th>
-                      <th className="px-4 py-3 min-w-[150px]">الصنف</th>
-                      <th className="px-4 py-3 whitespace-nowrap">الرصيد المتاح</th>
+                      <th className="px-4 py-3 whitespace-nowrap">رصيد العلف المتاح</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
                     {custodyRows.map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="px-4 py-3">
-                          <div className="font-black text-slate-800 dark:text-white">{row.barnName}</div>
-                          <div className="text-[10px] font-bold text-slate-500 mt-0.5">{row.cycleName}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {row.category === 'FEED' ? <Wheat className="w-4 h-4 text-amber-500 shrink-0" /> : <Box className="w-4 h-4 text-indigo-400 shrink-0" />}
-                            <span className="font-bold leading-tight">{row.itemName}</span>
+                          <div className="font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                            <Wheat className="w-4 h-4 text-amber-500" /> {row.barnName}
                           </div>
+                          <div className="text-[10px] font-bold text-slate-500 mt-0.5 pr-5.5">دورة: {row.cycleName}</div>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`font-black text-base ${row.quantity <= 10 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                            {row.quantity} <span className="text-[10px] font-bold text-slate-400">{getUnitName(row.unit)}</span>
+                            {row.quantity} <span className="text-[10px] font-bold text-slate-400">{getUnitName(row.unit)} - ({row.itemName})</span>
                           </span>
                         </td>
                       </tr>
@@ -334,7 +335,7 @@ const SupervisorInventory = () => {
                 {custodyRows.length === 0 && (
                   <div className="text-center p-8 bg-rose-50/50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 text-sm font-bold flex flex-col items-center justify-center gap-2">
                     <AlertTriangle className="w-8 h-8 opacity-80" />
-                    لا توجد أي عُهد منصرفة للعنابر حالياً، يرجى صرف الأصناف لتسجيل اليومية.
+                    لا توجد أي أرصدة أعلاف منصرفة للعنابر حالياً.
                   </div>
                 )}
               </div>
@@ -410,7 +411,7 @@ const SupervisorInventory = () => {
         )}
       </AnimatePresence>
 
-      {/* مودال صرف العهدة القديم */}
+      {/* مودال صرف العهدة */}
       <AnimatePresence>
         {isTransferModalOpen && (
           <>
@@ -419,8 +420,8 @@ const SupervisorInventory = () => {
               <motion.div variants={sheetVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-md bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[90dvh]">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
                   <div>
-                    <h3 className="text-base font-black text-slate-800 dark:text-white">صرف عهدة للعنبر</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">نقل من المخزن الرئيسي إلى عهدة الدورة</p>
+                    <h3 className="text-base font-black text-slate-800 dark:text-white">صرف عهدة أعلاف للعنبر</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5">نقل الأعلاف من المخزن الرئيسي إلى عهدة الدورة</p>
                   </div>
                   <button onClick={() => setIsTransferModalOpen(false)} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="w-5 h-5" /></button>
                 </div>
@@ -436,10 +437,11 @@ const SupervisorInventory = () => {
                     </div>
 
                     <div>
-                      <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">نوع الصنف المراد صرفه *</label>
+                      <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">صنف العلف المراد صرفه *</label>
                       <select value={transferData.item_id} onChange={(e) => setTransferData((p) => ({ ...p, item_id: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" required>
-                        <option value="">-- اختر الصنف --</option>
-                        {inventoryItems.filter(i => i.category !== 'PRODUCT').map((f) => (
+                        <option value="">-- اختر صنف العلف --</option>
+                        {/* 🚀 إظهار الأعلاف فقط في نافذة الصرف */}
+                        {feedItems.map((f) => (
                           <option key={f._id} value={f._id} disabled={f.stock_quantity === 0}>
                             {f.name} (المتاح: {f.stock_quantity})
                           </option>
