@@ -12,20 +12,19 @@ import { showAlert } from '../../utils/alert';
 const SupervisorInventory = () => {
   const [farms, setFarms] = useState([]);
   const [selectedFarmId, setSelectedFarmId] = useState('');
-  const [hasFeedMill, setHasFeedMill] = useState(false); // 
+  const [hasFeedMill, setHasFeedMill] = useState(false); 
 
   const [activeCycles, setActiveCycles] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
-  const [pendingMovements, setPendingMovements] = useState([]); //
+  const [pendingMovements, setPendingMovements] = useState([]); 
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-  const [isProduceModalOpen, setIsProduceModalOpen] = useState(false); // 
+  const [isProduceModalOpen, setIsProduceModalOpen] = useState(false); 
 
   const [transferData, setTransferData] = useState({ cycle_id: '', item_id: '', quantity: '' });
   
-  // 🚀 بيانات إنتاج المدشة
   const [produceData, setProduceData] = useState({
     item_id: '', quantity: '', unit_cost: '', direct_to_barn: false, cycle_id: ''
   });
@@ -63,7 +62,7 @@ const SupervisorInventory = () => {
       const [cyclesRes, inventoryRes, pendingRes] = await Promise.all([
         cycleService.getFarmCycles(farmId),
         inventoryService.getInventoryItems(farmId),
-        inventoryService.getPendingMovements(farmId) // 🚀 جلب الشحنات المعلقة
+        inventoryService.getPendingMovements(farmId) 
       ]);
 
       if (isMounted) {
@@ -77,8 +76,6 @@ const SupervisorInventory = () => {
       if (isMounted) setIsLoading(false);
     }
   };
-
-  // ===================== Handlers =====================
 
   const handleTransferSubmit = async (e) => {
     e.preventDefault();
@@ -104,7 +101,6 @@ const SupervisorInventory = () => {
     } finally { setIsSubmitting(false); }
   };
 
-  // 🚀 تأكيد استلام الشحنة
   const handleConfirmReceipt = async (movementId) => {
     try {
       setIsSubmitting(true);
@@ -116,7 +112,6 @@ const SupervisorInventory = () => {
     } finally { setIsSubmitting(false); }
   };
 
-  // 🚀 تسجيل إنتاج المدشة
   const handleProduceSubmit = async (e) => {
     e.preventDefault();
     if (!produceData.item_id || !produceData.quantity || !produceData.unit_cost) {
@@ -138,10 +133,8 @@ const SupervisorInventory = () => {
     } finally { setIsSubmitting(false); }
   };
 
-  // ===================== Helpers =====================
   const feedItems = inventoryItems.filter((i) => i.category === 'FEED');
   const productItems = inventoryItems.filter((i) => i.category === 'PRODUCT');
-  // 🚀 جلب الأدوية والمطهرات وغيرها
   const generalItems = inventoryItems.filter((i) => !['FEED', 'PRODUCT'].includes(i.category));
 
   const getUnitName = (unit) => {
@@ -158,6 +151,24 @@ const SupervisorInventory = () => {
     }
   };
 
+  // 🚀 تحضير صفوف جدول العهدة لتكون مدمجة وسريعة
+  const custodyRows = [];
+  activeCycles.forEach((cycle) => {
+    if (cycle.feed_custody && cycle.feed_custody.length > 0) {
+      cycle.feed_custody.forEach((custody) => {
+        custodyRows.push({
+          id: `${cycle._id}_${custody._id}`,
+          barnName: cycle.barn_id?.name || 'عنبر غير محدد',
+          cycleName: cycle.name,
+          itemName: custody.item_id?.name || 'صنف غير محدد',
+          category: custody.item_id?.category,
+          quantity: custody.quantity,
+          unit: custody.item_id?.unit
+        });
+      });
+    }
+  });
+
   const sheetVariants = { hidden: { y: '100%', opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } }, exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } } };
   const overlayVariants = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } };
 
@@ -171,7 +182,6 @@ const SupervisorInventory = () => {
           <p className="text-sm font-bold text-slate-500 mt-1">متابعة أرصدة المزرعة وصرف العلف للعنابر</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* 🚀 الزر الذكي للمدشة يظهر فقط إذا كان للمزرعة مدشة */}
           {hasFeedMill && (
             <button onClick={() => setIsProduceModalOpen(true)} disabled={feedItems.length === 0} className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-amber-700 active:scale-95 shadow-sm disabled:opacity-50">
               <Factory className="h-4 w-4" /> إنتاج مدشة
@@ -188,7 +198,7 @@ const SupervisorInventory = () => {
       ) : (
         <div className="space-y-8">
           
-          {/* 🚀 القسم الجديد: الشحنات في الطريق */}
+          {/* الشحنات في الطريق */}
           {pendingMovements.length > 0 && (
             <section>
               <h2 className="text-sm font-black text-emerald-600 dark:text-emerald-400 mb-3 flex items-center gap-2">
@@ -215,51 +225,7 @@ const SupervisorInventory = () => {
             </section>
           )}
 
-          {/* 🛡️ القسم الأول: عهدة العنابر (الاستهلاك الداخلي) */}
-          <section>
-            <h2 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <Bird className="w-5 h-5 text-emerald-500" /> عهدة العنابر النشطة (الرصيد الداخلي)
-            </h2>
-            {activeCycles.length === 0 ? (
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 text-center text-slate-500 font-bold text-sm">
-                لا توجد عنابر نشطة حالياً.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeCycles.map((cycle) => (
-                  <div key={cycle._id} className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <div>
-                        <h3 className="font-black text-slate-800 dark:text-white">{cycle.barn_id?.name}</h3>
-                        <p className="text-[10px] font-bold text-slate-500 mt-0.5">{cycle.type === 'LAYER' ? 'بياض' : 'تسمين'} - دورة: {cycle.name}</p>
-                      </div>
-                    </div>
-                    {cycle.feed_custody && cycle.feed_custody.length > 0 ? (
-                      <div className="space-y-2">
-                        {cycle.feed_custody.map((custody) => (
-                          <div key={custody._id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                              {custody.item_id?.category === 'FEED' ? <Wheat className="w-4 h-4 text-amber-500" /> : <Box className="w-4 h-4 text-indigo-400" />} 
-                              {custody.item_id?.name || 'صنف غير محدد'}
-                            </span>
-                            <span className={`font-black ${custody.quantity <= 10 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                              {custody.quantity} <span className="text-[10px] text-slate-400 font-normal">{getUnitName(custody.item_id?.unit)}</span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center p-3 bg-rose-50 dark:bg-rose-900/10 rounded-xl border border-rose-100 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4" /> العهدة فارغة، يرجى صرف الأصناف لتسجيل اليومية.
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* 🛡️ القسم الثاني: المخزن الرئيسي (شامل أدوية وأعلاف ومنتجات) */}
+          {/* 🛡️ القسم الأول: المخزن الرئيسي (تم نقله للأعلى) */}
           <section>
             <h2 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
               <Package className="w-5 h-5 text-indigo-500" /> المخزن الرئيسي
@@ -283,7 +249,7 @@ const SupervisorInventory = () => {
                 </div>
               ))}
 
-              {/* 🚀 الأدوية والمستلزمات */}
+              {/* الأدوية والمستلزمات */}
               {generalItems.map((item) => (
                 <div key={item._id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
                   <div className="flex gap-2 items-start mb-3">
@@ -326,10 +292,59 @@ const SupervisorInventory = () => {
               )}
             </div>
           </section>
+
+          {/* 🛡️ القسم الثاني: عهدة العنابر (تم تحويله لجدول أنيق ومدمج) */}
+          <section>
+            <h2 className="text-lg font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+              <Bird className="w-5 h-5 text-emerald-500" /> عهدة العنابر النشطة (الرصيد الداخلي)
+            </h2>
+            
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-right">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
+                    <tr>
+                      <th className="px-4 py-3 whitespace-nowrap">العنبر (الدورة)</th>
+                      <th className="px-4 py-3 min-w-[150px]">الصنف</th>
+                      <th className="px-4 py-3 whitespace-nowrap">الرصيد المتاح</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
+                    {custodyRows.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-black text-slate-800 dark:text-white">{row.barnName}</div>
+                          <div className="text-[10px] font-bold text-slate-500 mt-0.5">{row.cycleName}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {row.category === 'FEED' ? <Wheat className="w-4 h-4 text-amber-500 shrink-0" /> : <Box className="w-4 h-4 text-indigo-400 shrink-0" />}
+                            <span className="font-bold leading-tight">{row.itemName}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-black text-base ${row.quantity <= 10 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {row.quantity} <span className="text-[10px] font-bold text-slate-400">{getUnitName(row.unit)}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {custodyRows.length === 0 && (
+                  <div className="text-center p-8 bg-rose-50/50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 text-sm font-bold flex flex-col items-center justify-center gap-2">
+                    <AlertTriangle className="w-8 h-8 opacity-80" />
+                    لا توجد أي عُهد منصرفة للعنابر حالياً، يرجى صرف الأصناف لتسجيل اليومية.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
         </div>
       )}
 
-      {/* 🚀 مودال المدشة الذكية */}
+      {/* مودال المدشة الذكية */}
       <AnimatePresence>
         {isProduceModalOpen && (
           <>
@@ -424,7 +439,6 @@ const SupervisorInventory = () => {
                       <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">نوع الصنف المراد صرفه *</label>
                       <select value={transferData.item_id} onChange={(e) => setTransferData((p) => ({ ...p, item_id: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200" required>
                         <option value="">-- اختر الصنف --</option>
-                        {/* 🚀 إزالة قيد العلف فقط ليمكن صرف الدواء */}
                         {inventoryItems.filter(i => i.category !== 'PRODUCT').map((f) => (
                           <option key={f._id} value={f._id} disabled={f.stock_quantity === 0}>
                             {f.name} (المتاح: {f.stock_quantity})
