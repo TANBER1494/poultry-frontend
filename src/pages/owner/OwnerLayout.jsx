@@ -18,7 +18,7 @@ import {
   ChevronRight,
   ChevronLeft,
   CheckCircle2,
-  ShoppingCart 
+  ShoppingCart,
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import { ThemeContext } from '../../context/ThemeContext';
@@ -36,7 +36,7 @@ const OwnerLayout = () => {
     { name: 'الرئيسية', href: '/owner/dashboard', icon: LayoutDashboard },
     { name: 'المزارع', href: '/owner/farms', icon: Tractor },
     { name: 'الدورات', href: '/owner/cycles', icon: RefreshCcw },
-    { name: 'التجار والمبيعات', href: '/owner/merchants', icon: Users }, 
+    { name: ' المبيعات', href: '/owner/merchants', icon: Users },
     { name: 'الماليات', href: '/owner/finances', icon: Wallet },
   ];
 
