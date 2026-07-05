@@ -239,7 +239,31 @@ const InventoryManager = () => {
 
   const formatCurrency = (amount) => new Intl.NumberFormat('ar-EG', { style: 'currency', currency: 'EGP' }).format(amount || 0);
 
-  const totalInventoryValue = items.reduce((acc, item) => acc + (item.stock_quantity * item.average_unit_cost), 0);
+  // 1. حساب قيمة المخزن الرئيسي
+  const mainInventoryValue = items.reduce(
+    (acc, item) => acc + (item.stock_quantity * (item.average_unit_cost || 0)),
+    0
+  );
+
+  // 2. حساب قيمة العُهد داخل العنابر النشطة (التي لم تُستهلك بعد)
+  const custodyValue = cycles.filter(c => c.status === 'ACTIVE').reduce((acc, cycle) => {
+    let cycleCustodyValue = 0;
+    if (cycle.feed_custody && cycle.feed_custody.length > 0) {
+      cycle.feed_custody.forEach(custody => {
+        // جلب بيانات الصنف من المخزن لمعرفة متوسط تكلفته
+        const itemId = custody.item_id?._id || custody.item_id;
+        const item = items.find(i => i._id === itemId);
+        if (item) {
+          cycleCustodyValue += (custody.quantity * (item.average_unit_cost || 0));
+        }
+      });
+    }
+    return acc + cycleCustodyValue;
+  }, 0);
+
+  // 3. إجمالي الأصول الحقيقية للمزرعة
+  const totalInventoryValue = mainInventoryValue + custodyValue;
+  
   const alertsCount = items.filter(item => item.stock_quantity <= item.min_alert_level && item.min_alert_level > 0).length;
 
   const sheetVariants = { hidden: { y: '100%', opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } }, exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } } };
