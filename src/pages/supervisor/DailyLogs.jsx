@@ -211,15 +211,13 @@ const DailyLogs = () => {
     }
   };
 
-  // 🖨️ دالة الطباعة الاحترافية ليوم محدد
-  const handlePrintDay = (dateStr, dayLogs) => {
-    const printWindow = window.open('', '_blank');
+const handlePrintDay = (dateStr, dayLogs) => {
     const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     let tableRows = '';
     dayLogs.forEach(log => {
       const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
-      const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join(', ');
+      const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
       tableRows += `
         <tr>
           <td>${log.cycleDetails?.barn_id?.name || '-'} <br><small>${typeLabel}</small></td>
@@ -238,11 +236,11 @@ const DailyLogs = () => {
         <head>
           <title>سجل اليومية - ${formattedDate}</title>
           <style>
-            body { font-family: Tahoma, Arial, sans-serif; padding: 20px; color: #333; }
+            body { font-family: Tahoma, Arial, sans-serif; padding: 20px; color: #333; direction: rtl; }
             h2 { text-align: center; color: #1e1b4b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; text-align: right; }
-            td { border: 1px solid #cbd5e1; padding: 10px; text-align: right; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; text-align: right; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px; }
+            td { border: 1px solid #cbd5e1; padding: 10px; }
             tr:nth-child(even) { background-color: #f8fafc; }
             .footer { margin-top: 30px; text-align: center; font-size: 12px; color: #64748b; }
           </style>
@@ -264,12 +262,35 @@ const DailyLogs = () => {
             <tbody>${tableRows}</tbody>
           </table>
           <div class="footer">تاريخ الطباعة: ${new Date().toLocaleString('ar-EG')}</div>
-          <script>window.onload = function() { window.print(); window.close(); }</script>
         </body>
       </html>
     `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+
+    // 🚀 إنشاء Iframe مخفي بذكاء لتجاوز قيود الموبايل والـ Pop-ups
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(htmlContent);
+    doc.close();
+
+    iframe.contentWindow.focus();
+    
+    // الانتظار نصف ثانية لتأكيد جلب الخطوط وتنسيقات الـ HTML ثم استدعاء الطباعة
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      // تنظيف الـ DOM بعد دقيقة من الطباعة لعدم استهلاك الذاكرة
+      setTimeout(() => {
+        document.body.removeChild(iframe);
+      }, 1000);
+    }, 500);
   };
 
   const sortedAndFilteredDates = Object.keys(logsByDate)
