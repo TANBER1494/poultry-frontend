@@ -12,9 +12,16 @@ const dailyLogService = {
   // 2. جلب يوميات دورة معينة
   getCycleDailyLogs: async (cycleId, farmId) => {
     // نمرر farm_id كـ query parameter للتحقق من الصلاحيات كما يطلب الباك إند
-    const response = await api.get(`${DAILY_LOG_ENDPOINT}/cycle/${cycleId}?farm_id=${farmId}`);
+    const response = await api.get(
+      `${DAILY_LOG_ENDPOINT}/cycle/${cycleId}?farm_id=${farmId}`
+    );
     return response.data;
-  }
+  },
+
+  createBulkDailyLogs: async (data) => {
+    const response = await api.post('/daily-logs/bulk', data);
+    return response.data;
+  },
 };
 
 export default dailyLogService;

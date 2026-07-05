@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, X, Loader2, ClipboardList, Activity, Package, 
-  Droplets, Bird, CalendarDays, TrendingDown, Wheat, Table, ChevronDown, ChevronUp, Search, AlertTriangle
+  Bird, CalendarDays, TrendingDown, Wheat, Table, Search, AlertTriangle, Printer, Syringe
 } from 'lucide-react';
 import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
@@ -20,9 +20,9 @@ const DailyLogs = () => {
   
   const [activeCycles, setActiveCycles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
+  const [generalItems, setGeneralItems] = useState([]); // 🚀 الأدوية والمستلزمات
   
   const [logsByDate, setLogsByDate] = useState({});
-  const [expandedDates, setExpandedDates] = useState([]); 
   const [searchDate, setSearchDate] = useState(''); 
   
   const [isLoading, setIsLoading] = useState(true);
@@ -31,17 +31,10 @@ const DailyLogs = () => {
   
   const [isFormOpen, setIsFormOpen] = useState(isNewAction);
 
-  const [formData, setFormData] = useState({
-    cycle_id: '',
-    log_date: new Date().toISOString().split('T')[0],
-    mortality_count: '', 
-    feed_item_id: '', feed_consumed_bags: '', 
-    water_consumed_liters: '',
-    egg_trays_produced: '', 
-    average_weight_grams: '', medications_given: '', notes: ''
-  });
-
-  const [calculatedAge, setCalculatedAge] = useState(0);
+  const [globalLogDate, setGlobalLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [globalFeedItem, setGlobalFeedItem] = useState('');
+  
+  const [bulkData, setBulkData] = useState({});
 
   useEffect(() => {
     let isMounted = true;
@@ -77,10 +70,23 @@ const DailyLogs = () => {
       
       if (isMounted) {
         const active = (cyclesRes.cycles || []).filter(c => c.status === 'ACTIVE');
+        // ترتيب العنابر أبجدياً
+        active.sort((a, b) => (a.barn_id?.name || '').localeCompare(b.barn_id?.name || '', 'ar', { numeric: true }));
         setActiveCycles(active);
         
-        const feeds = (inventoryRes.items || []).filter(item => item.category === 'FEED');
-        setFeedItems(feeds);
+        const invItems = inventoryRes.items || [];
+        setFeedItems(invItems.filter(item => item.category === 'FEED'));
+        setGeneralItems(invItems.filter(item => !['FEED', 'PRODUCT'].includes(item.category)));
+
+        // تهيئة مصفوفة الإدخال المجمع
+        const initialBulk = {};
+        active.forEach(c => {
+          initialBulk[c._id] = {
+            mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', 
+            medication_item_id: '', medication_quantity: '', notes: ''
+          };
+        });
+        setBulkData(initialBulk);
 
         if (active.length > 0) {
           await fetchAllActiveLogs(active, farmId);
@@ -105,9 +111,7 @@ const DailyLogs = () => {
       results.forEach((res, index) => {
         const cycleLogs = res.logs || [];
         const cycleInfo = cycles[index];
-        cycleLogs.forEach(log => {
-          combined.push({ ...log, cycleDetails: cycleInfo });
-        });
+        cycleLogs.forEach(log => combined.push({ ...log, cycleDetails: cycleInfo }));
       });
 
       const grouped = combined.reduce((acc, log) => {
@@ -118,11 +122,6 @@ const DailyLogs = () => {
       }, {});
 
       setLogsByDate(grouped);
-      
-      const sortedDates = Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a));
-      if (sortedDates.length > 0) {
-        setExpandedDates([sortedDates[0]]);
-      }
     } catch (error) {
       showAlert.error('خطأ', 'تعذر جلب السجلات اليومية');
     } finally {
@@ -130,65 +129,84 @@ const DailyLogs = () => {
     }
   };
 
-  const toggleDateAccordion = (dateStr) => {
-    setExpandedDates(prev => 
-      prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr]
-    );
+  const calculateAge = (startDate, logDateStr) => {
+    if (!startDate || !logDateStr) return 0;
+    const logDate = new Date(logDateStr);
+    const start = new Date(startDate);
+    logDate.setHours(0,0,0,0);
+    start.setHours(0,0,0,0);
+    return Math.ceil((logDate - start) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  useEffect(() => {
-    if (formData.cycle_id && formData.log_date) {
-      const selectedCycle = activeCycles.find(c => c._id === formData.cycle_id);
-      if (selectedCycle) {
-        const logDate = new Date(formData.log_date);
-        const startDate = new Date(selectedCycle.start_date);
-        logDate.setHours(0,0,0,0);
-        startDate.setHours(0,0,0,0);
-        const diffTime = logDate - startDate;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        setCalculatedAge(diffDays);
-      }
-    } else {
-      setCalculatedAge(0);
-    }
-  }, [formData.cycle_id, formData.log_date, activeCycles]);
+  const handleBulkChange = (cycleId, field, value) => {
+    setBulkData(prev => ({
+      ...prev,
+      [cycleId]: { ...prev[cycleId], [field]: value }
+    }));
+  };
 
-  const handleFormSubmit = async (e) => {
+  // 🚀 الإرسال المجمع
+  const handleBulkSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.cycle_id) return showAlert.error('خطأ', 'يجب تحديد العنبر/الدورة');
-    if (calculatedAge < 1) return showAlert.error('تاريخ غير صالح', 'لا يمكن تسجيل يومية لتاريخ يسبق استلام الدورة');
+    if (!globalLogDate) return showAlert.error('خطأ', 'يجب تحديد تاريخ اليومية');
 
-    const hasFeed = Number(formData.feed_consumed_bags) > 0;
-    if (hasFeed && !formData.feed_item_id) return showAlert.error('بيانات ناقصة', 'يجب تحديد نوع العلف لتسجيل الاستهلاك');
+    const logsArray = [];
+    
+    for (const cycle of activeCycles) {
+      const row = bulkData[cycle._id];
+      const age = calculateAge(cycle.start_date, globalLogDate);
+      
+      // تجاهل العنابر التي ليس لها داتا أو عمرها غير صالح
+      const hasData = row.mortality_count || row.feed_consumed_bags || row.egg_trays_produced || row.notes || row.medication_quantity;
+      if (!hasData || age < 1) continue;
+
+      if (row.feed_consumed_bags > 0 && !globalFeedItem) {
+        return showAlert.error('خطأ', 'لقد سجلت استهلاك علف لبعض العنابر، يجب اختيار نوع العلف من الأعلى.');
+      }
+
+      const consumed_medications = [];
+      if (row.medication_item_id && row.medication_quantity > 0) {
+        consumed_medications.push({
+          item_id: row.medication_item_id,
+          quantity: Number(row.medication_quantity)
+        });
+      }
+
+      logsArray.push({
+        local_id: `LOG_${cycle._id}_${Date.now()}_${Math.random()}`,
+        barn_id: cycle.barn_id._id,
+        cycle_id: cycle._id,
+        log_date: globalLogDate,
+        age_in_days: age,
+        mortality_count: row.mortality_count,
+        feed_item_id: globalFeedItem,
+        feed_consumed_bags: row.feed_consumed_bags,
+        egg_trays_produced: row.egg_trays_produced,
+        consumed_medications: consumed_medications,
+        notes: row.notes
+      });
+    }
+
+    if (logsArray.length === 0) {
+      return showAlert.error('تنبيه', 'لم تقم بإدخال أي بيانات لأي عنبر.');
+    }
 
     try {
       setIsSubmitting(true);
-      const selectedCycle = activeCycles.find(c => c._id === formData.cycle_id);
-      
-      const payload = {
-        ...formData,
-        local_id: `LOG_${formData.cycle_id}_${Date.now()}`,
-        farm_id: selectedFarmId,
-        barn_id: selectedCycle.barn_id._id,
-        age_in_days: calculatedAge,
-        culled_count: 0,
-        feed_consumed_kg: 0,
-        loose_eggs_produced: 0,
-        broken_eggs: 0
-      };
-
-      await dailyLogService.createDailyLog(payload);
-      showAlert.success('تم التسجيل', 'تم حفظ اليومية بنجاح وتحديث الأرصدة');
+      await dailyLogService.createBulkDailyLogs({ logs: logsArray, farm_id: selectedFarmId });
+      showAlert.success('نجاح', `تم تسجيل وتحديث المخازن لعدد (${logsArray.length}) عنبر بنجاح`);
       setIsFormOpen(false);
       
-      setFormData(p => ({
-        ...p, cycle_id: '', mortality_count: '', feed_consumed_bags: '', water_consumed_liters: '',
-        egg_trays_produced: '', average_weight_grams: '', medications_given: '', notes: ''
-      }));
+      // تصفير الخانات
+      const resetBulk = {};
+      activeCycles.forEach(c => {
+        resetBulk[c._id] = { mortality_count: '', feed_consumed_bags: '', egg_trays_produced: '', medication_item_id: '', medication_quantity: '', notes: '' };
+      });
+      setBulkData(resetBulk);
       
-      await fetchDependencies(selectedFarmId); // إعادة الجلب بالكامل لتحديث حالة السلف (pending_pulls)
+      await fetchDependencies(selectedFarmId); 
     } catch (error) {
-      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تسجيل اليومية');
+      showAlert.error('إجراء مرفوض', error.response?.data?.message || 'فشل تسجيل اليوميات المجمعة');
     } finally {
       setIsSubmitting(false);
     }
@@ -198,18 +216,15 @@ const DailyLogs = () => {
     .filter(date => searchDate === '' || date === searchDate)
     .sort((a, b) => new Date(b) - new Date(a));
 
+  const getCycleTypeLabel = (type) => type === 'LAYER' ? 'بياض' : 'تسمين';
+
   const sheetVariants = { hidden: { y: '100%', opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } }, exit: { y: '100%', opacity: 0, transition: { duration: 0.2 } } };
   const overlayVariants = { hidden: { opacity: 0 }, visible: { opacity: 1 }, exit: { opacity: 0 } };
 
-  const getCycleTypeLabel = (type) => type === 'LAYER' ? 'بياض' : 'تسمين';
-
-  // 🚀 مراقبة السلفة للعنبر المختار
-  const activeSelectedCycle = activeCycles.find(c => c._id === formData.cycle_id);
-  const pendingEggPulls = activeSelectedCycle?.pending_egg_pulls || 0;
-
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
+    <div className="space-y-6 print:space-y-2">
+      {/* 🖨️ الهيدر يختفي عند الطباعة */}
+      <div className="print:hidden flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-5 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
             <Table className="w-6 h-6 text-indigo-500" /> سجلات المزرعة المجمعة
@@ -224,233 +239,210 @@ const DailyLogs = () => {
             {searchDate && <button onClick={() => setSearchDate('')} className="absolute left-2 top-2.5 text-rose-500 hover:text-rose-700"><X className="w-4 h-4"/></button>}
           </div>
 
+          <button onClick={() => window.print()} className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-slate-700 px-4 py-2.5 text-sm font-bold transition-all hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+            <Printer className="w-5 h-5" /> طباعة
+          </button>
+
           <button onClick={() => setIsFormOpen(true)} disabled={activeCycles.length === 0} className="w-full sm:w-auto flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700 active:scale-95 shadow-sm disabled:opacity-50">
-            <Plus className="h-5 w-5" /><span className="hidden sm:inline">يومية عنبر</span>
+            <Plus className="h-5 w-5" /><span className="hidden sm:inline">إدخال مجمع</span>
           </button>
         </div>
       </div>
 
       {isLoading || isLogsLoading ? (
-        <div className="flex h-64 items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
+        <div className="flex h-64 items-center justify-center print:hidden"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
       ) : activeCycles.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50 print:hidden">
           <Activity className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-lg font-black text-slate-800 dark:text-white">لا توجد دورات نشطة</h3>
-          <p className="mt-2 text-sm font-medium text-slate-500">قم ببدء دورة إنتاجية من حساب المالك أولاً لتتمكن من تسجيل يومياتها.</p>
+          <p className="mt-2 text-sm font-medium text-slate-500">قم ببدء دورة إنتاجية لتتمكن من تسجيل يومياتها.</p>
         </div>
       ) : sortedAndFilteredDates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 border-dashed bg-white py-20 px-4 text-center dark:border-slate-800 dark:bg-slate-900/50 print:hidden">
           <ClipboardList className="h-12 w-12 text-slate-300 dark:text-slate-600 mb-4" />
           <h3 className="text-lg font-black text-slate-800 dark:text-white">لا توجد سجلات</h3>
           <p className="mt-2 text-sm font-medium text-slate-500 mb-4">لم يتم تسجيل أي يومية {searchDate && 'في هذا التاريخ'}.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6 print:space-y-8">
           {sortedAndFilteredDates.map(dateStr => {
-            const isExpanded = expandedDates.includes(dateStr);
             const dayLogs = logsByDate[dateStr];
             
             return (
-              <div key={dateStr} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
-                <button onClick={() => toggleDateAccordion(dateStr)} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 p-2 rounded-lg">
-                      <CalendarDays className="w-5 h-5" />
-                    </div>
-                    <div className="text-right">
-                      <h3 className="font-black text-slate-800 dark:text-white text-base">{new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
-                      <p className="text-xs font-bold text-slate-500 mt-0.5">تم تسجيل {dayLogs.length} عنابر في هذا اليوم</p>
-                    </div>
+              <div key={dateStr} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden print:border-slate-400 print:shadow-none print:break-inside-avoid">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 print:bg-white print:border-b-2 print:border-black flex items-center gap-3">
+                  <div className="bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 p-2 rounded-lg print:hidden">
+                    <CalendarDays className="w-5 h-5" />
                   </div>
-                  <div className="text-slate-400">
-                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white text-lg print:text-black">
+                      يومية: {new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </h3>
+                    <p className="text-xs font-bold text-slate-500 mt-0.5 print:text-slate-600">تم تسجيل ({dayLogs.length}) عنابر</p>
                   </div>
-                </button>
+                </div>
 
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-t border-slate-100 dark:border-slate-800">
-                      <div className="hidden lg:block overflow-x-auto">
-                        <table className="w-full text-right text-sm">
-                          <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-slate-500 dark:text-slate-400">
-                            <tr>
-                              <th className="p-4 rounded-tr-lg">العنبر / الدورة</th>
-                              <th className="p-4">العمر</th>
-                              <th className="p-4 text-rose-500">النافق</th>
-                              <th className="p-4 text-amber-600">علف (شكاير)</th>
-                              <th className="p-4 text-cyan-600">مياه (لتر)</th>
-                              <th className="p-4 text-emerald-600">الإنتاج الكلي (أطباق)</th>
-                              <th className="p-4 rounded-tl-lg max-w-[200px]">أدوية وملاحظات</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {dayLogs.map(log => (
-                              <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                <td className="p-4">
-                                  <div className="font-black text-slate-800 dark:text-white">{log.cycleDetails?.barn_id?.name || 'غير معروف'}</div>
-                                  <div className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 w-fit px-1.5 py-0.5 rounded mt-1">{getCycleTypeLabel(log.cycleDetails?.type)}</div>
-                                </td>
-                                <td className="p-4 font-black">{log.age_in_days} <span className="text-[10px] font-normal text-slate-400">يوم</span></td>
-                                <td className="p-4 font-black text-rose-600 dark:text-rose-400">{log.mortality_count || '-'}</td>
-                                <td className="p-4 font-black text-amber-600 dark:text-amber-500">{log.feed_consumed_bags || '-'}</td>
-                                <td className="p-4 font-black text-cyan-600 dark:text-cyan-500">{log.water_consumed_liters || '-'}</td>
-                                <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">{log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : 'N/A'}</td>
-                                <td className="p-4 text-xs font-medium text-slate-500 truncate max-w-[200px]" title={log.medications_given || log.notes}>{log.medications_given || log.notes || '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="lg:hidden p-4 space-y-3 bg-slate-50/50 dark:bg-slate-900">
-                        {dayLogs.map(log => (
-                          <div key={log._id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
-                            <div className="flex justify-between items-start mb-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                              <div>
-                                <h4 className="font-black text-slate-800 dark:text-white">{log.cycleDetails?.barn_id?.name}</h4>
-                                <span className="text-[10px] font-bold text-slate-500">{getCycleTypeLabel(log.cycleDetails?.type)}</span>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-sm print:text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-slate-500 dark:text-slate-400 print:bg-slate-100 print:text-black">
+                      <tr>
+                        <th className="p-3 whitespace-nowrap border-l border-slate-100 dark:border-slate-700 print:border-slate-300">العنبر (النوع)</th>
+                        <th className="p-3 border-l border-slate-100 dark:border-slate-700 print:border-slate-300">العمر</th>
+                        <th className="p-3 text-rose-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">النافق</th>
+                        <th className="p-3 text-amber-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">علف (شكاير)</th>
+                        <th className="p-3 text-emerald-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">بيض (أطباق)</th>
+                        <th className="p-3 text-indigo-600 border-l border-slate-100 dark:border-slate-700 print:border-slate-300 print:text-black">أدوية ومستلزمات</th>
+                        <th className="p-3 w-1/4">ملاحظات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-300">
+                      {dayLogs.map(log => (
+                        <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors print:border-b print:border-slate-300">
+                          <td className="p-3 border-l border-slate-50 dark:border-slate-800 print:border-slate-300">
+                            <div className="font-black text-slate-800 dark:text-white print:text-black">{log.cycleDetails?.barn_id?.name || 'غير معروف'}</div>
+                            <div className="text-[10px] font-bold text-slate-500 print:text-slate-600 mt-0.5">{getCycleTypeLabel(log.cycleDetails?.type)}</div>
+                          </td>
+                          <td className="p-3 font-black border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.age_in_days} <span className="text-[9px] text-slate-400">يوم</span></td>
+                          <td className="p-3 font-black text-rose-600 dark:text-rose-400 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.mortality_count || '-'}</td>
+                          <td className="p-3 font-black text-amber-600 dark:text-amber-500 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.feed_consumed_bags || '-'}</td>
+                          <td className="p-3 font-black text-emerald-600 dark:text-emerald-400 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">{log.cycleDetails?.type === 'LAYER' ? (log.egg_trays_produced || '-') : '-'}</td>
+                          <td className="p-3 border-l border-slate-50 dark:border-slate-800 print:border-slate-300 print:text-black">
+                            {log.consumed_medications && log.consumed_medications.length > 0 ? (
+                              <div className="flex flex-col gap-1">
+                                {log.consumed_medications.map((med, i) => (
+                                  <span key={i} className="text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 print:bg-transparent px-1.5 py-0.5 rounded border border-indigo-100 dark:border-indigo-800/50 print:border-none">
+                                    {med.name} ({med.quantity})
+                                  </span>
+                                ))}
                               </div>
-                              <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg text-xs font-black">
-                                عمر {log.age_in_days}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div className="flex justify-between bg-rose-50 dark:bg-rose-900/10 p-2 rounded-lg text-rose-600 dark:text-rose-400">
-                                <span className="text-[10px] font-bold">النافق</span>
-                                <span className="font-black">{log.mortality_count || '-'}</span>
-                              </div>
-                              <div className="flex justify-between bg-amber-50 dark:bg-amber-900/10 p-2 rounded-lg text-amber-600 dark:text-amber-500">
-                                <span className="text-[10px] font-bold">علف (شكاير)</span>
-                                <span className="font-black">{log.feed_consumed_bags || '-'}</span>
-                              </div>
-                              {log.cycleDetails?.type === 'LAYER' && (
-                                <div className="flex justify-between bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-lg text-emerald-600 dark:text-emerald-400 col-span-2">
-                                  <span className="text-[10px] font-bold">إنتاج كلي (أطباق)</span>
-                                  <span className="font-black">{log.egg_trays_produced || '-'}</span>
-                                </div>
-                              )}
-                              {(log.medications_given || log.notes) && (
-                                <div className="col-span-2 text-xs text-slate-500 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg mt-1">
-                                  <span className="font-bold">ملاحظات:</span> {log.medications_given} {log.notes}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                            ) : '-'}
+                          </td>
+                          <td className="p-3 text-xs font-medium text-slate-600 dark:text-slate-400 print:text-black">
+                            {log.notes || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
+      {/* 🚀 مودال الإدخال المجمع (Bulk Entry Spreadsheet) */}
       <AnimatePresence>
         {isFormOpen && (
           <>
-            <motion.div variants={overlayVariants} initial="hidden" animate="visible" exit="hidden" onClick={() => setIsFormOpen(false)} className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm" />
-            <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4">
-              <motion.div variants={sheetVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[90dvh]">
+            <motion.div variants={overlayVariants} initial="hidden" animate="visible" exit="hidden" onClick={() => setIsFormOpen(false)} className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm print:hidden" />
+            <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none sm:items-center sm:p-4 print:hidden">
+              <motion.div variants={sheetVariants} initial="hidden" animate="visible" exit="exit" className="w-full max-w-6xl bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl pointer-events-auto flex flex-col max-h-[95dvh]">
                 
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-900 rounded-t-3xl">
                   <div>
-                    <h3 className="text-base font-black text-slate-800 dark:text-white">إدخال يومية عنبر</h3>
-                    <p className="text-xs font-bold text-slate-500 mt-0.5">تحديث مباشر للأرصدة والمخازن</p>
+                    <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2"><Table className="w-5 h-5 text-indigo-600"/> إدخال يومية مجمعة للمزرعة</h3>
+                    <p className="text-xs font-bold text-slate-500 mt-1">تحديث مباشر لأرصدة ومخازن كافة العنابر في خطوة واحدة</p>
                   </div>
-                  <button onClick={() => setIsFormOpen(false)} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setIsFormOpen(false)} className="p-1.5 rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"><X className="w-6 h-6" /></button>
                 </div>
 
-                <div className="p-6 overflow-y-auto custom-scrollbar">
-                  <form id="dailyLogForm" onSubmit={handleFormSubmit} className="space-y-6">
+                <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50 dark:bg-slate-900/50">
+                  <form id="bulkDailyLogForm" onSubmit={handleBulkSubmit} className="space-y-4">
                     
-                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
-                      <div>
-                        <label className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-400">اختر العنبر / الدورة *</label>
-                        <select value={formData.cycle_id} onChange={e => setFormData(p => ({...p, cycle_id: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-indigo-400" required>
-                          <option value="">-- يرجى تحديد العنبر لتسجيل يوميته --</option>
-                          {activeCycles.map(c => <option key={c._id} value={c._id}>{c.name} ({c.barn_id?.name}) - {getCycleTypeLabel(c.type)}</option>)}
+                    {/* 🚀 إعدادات اليومية (تطبق على كل العنابر) */}
+                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row gap-4 mb-6">
+                      <div className="w-full sm:w-1/3">
+                        <label className="mb-1.5 block text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">تاريخ اليومية للكل *</label>
+                        <input type="date" value={globalLogDate} onChange={e => setGlobalLogDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white" required />
+                      </div>
+                      <div className="w-full sm:w-2/3">
+                        <label className="mb-1.5 block text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">نوع العلف المستخدم اليوم (من المخزن)</label>
+                        <select value={globalFeedItem} onChange={e => setGlobalFeedItem(e.target.value)} className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900 outline-none focus:border-amber-500 dark:border-amber-900/40 dark:bg-slate-700 dark:text-amber-200">
+                          <option value="">-- إذا تم استهلاك علف، اختر النوع الموحد هنا --</option>
+                          {feedItems.map(f => <option key={f._id} value={f._id}>{f.name} (المتاح: {f.stock_quantity})</option>)}
                         </select>
                       </div>
-                      
-                      <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-4">
-                        <div className="w-1/2 pr-2">
-                          <label className="mb-1.5 block text-[11px] font-bold text-slate-500">تاريخ اليومية *</label>
-                          <input type="date" value={formData.log_date} onChange={e => setFormData(p => ({...p, log_date: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" required />
-                        </div>
-                        <div className="w-1/2 border-r border-slate-200 dark:border-slate-700 pl-4 text-center">
-                          <p className="text-[11px] font-bold text-slate-500 mb-1">عمر القطيع المحسوب</p>
-                          <p className={`text-2xl font-black ${calculatedAge < 1 ? 'text-rose-500' : 'text-indigo-600 dark:text-indigo-400'}`}>{calculatedAge} <span className="text-xs font-bold text-slate-400">يوم</span></p>
-                        </div>
-                      </div>
                     </div>
 
-                    <div>
-                      <h4 className="flex items-center gap-2 font-black text-sm text-rose-600 dark:text-rose-400 mb-3"><TrendingDown className="w-4 h-4"/> الحيوية والنافق</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        <input type="number" min="0" placeholder="عدد النافق اليوم" value={formData.mortality_count} onChange={e => setFormData(p => ({...p, mortality_count: e.target.value}))} className="w-full rounded-xl border border-rose-100 bg-rose-50/50 px-3 py-2.5 text-sm font-bold outline-none focus:border-rose-500 dark:border-rose-900/30 dark:bg-rose-900/10 dark:text-rose-400" />
-                        <input type="number" min="0" placeholder="متوسط الوزن (جرام) - إن وُجد" value={formData.average_weight_grams} onChange={e => setFormData(p => ({...p, average_weight_grams: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                    {/* 🚀 جدول السبريدشيت للعنابر */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-right text-sm min-w-[800px]">
+                          <thead className="bg-slate-100 dark:bg-slate-800/80 text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+                            <tr>
+                              <th className="p-3 w-48 sticky right-0 bg-slate-100 dark:bg-slate-800 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">العنبر (العمر)</th>
+                              <th className="p-3 w-24 text-rose-600">النافق</th>
+                              <th className="p-3 w-28 text-amber-600">علف (شكاير)</th>
+                              <th className="p-3 w-28 text-emerald-600">إنتاج (أطباق)</th>
+                              <th className="p-3 w-56 text-indigo-600">صرف أدوية (من المخزن)</th>
+                              <th className="p-3 w-48">ملاحظات العنبر</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                            {activeCycles.map((cycle) => {
+                              const age = calculateAge(cycle.start_date, globalLogDate);
+                              const pendingPulls = cycle.pending_egg_pulls || 0;
+                              const isLayer = cycle.type === 'LAYER';
+                              
+                              return (
+                                <tr key={cycle._id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                                  <td className="p-3 sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-slate-50 dark:group-hover:bg-slate-700/30 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] transition-colors">
+                                    <div className="font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                                      <Bird className="w-4 h-4 text-indigo-500" /> {cycle.barn_id?.name}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${age < 1 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                                        {age < 1 ? 'تاريخ خطأ' : `عمر: ${age} يوم`}
+                                      </span>
+                                    </div>
+                                    {isLayer && pendingPulls > 0 && (
+                                      <div className="text-[9px] font-black text-amber-700 bg-amber-100 px-1 py-0.5 rounded mt-1 flex w-fit">
+                                        سلفة فواتير: {pendingPulls}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-3">
+                                    <input type="number" min="0" placeholder="0" disabled={age < 1} value={bulkData[cycle._id]?.mortality_count} onChange={e => handleBulkChange(cycle._id, 'mortality_count', e.target.value)} className="w-full rounded-lg border border-rose-100 bg-rose-50/30 px-2 py-2 text-center text-sm font-black text-rose-700 outline-none focus:border-rose-500 focus:bg-rose-50 dark:border-rose-900/30 dark:bg-slate-900 dark:text-rose-400 disabled:opacity-50" />
+                                  </td>
+                                  <td className="p-3">
+                                    <input type="number" step="0.01" min="0" placeholder="0" disabled={age < 1} value={bulkData[cycle._id]?.feed_consumed_bags} onChange={e => handleBulkChange(cycle._id, 'feed_consumed_bags', e.target.value)} className="w-full rounded-lg border border-amber-100 bg-amber-50/30 px-2 py-2 text-center text-sm font-black text-amber-700 outline-none focus:border-amber-500 focus:bg-amber-50 dark:border-amber-900/30 dark:bg-slate-900 dark:text-amber-400 disabled:opacity-50" />
+                                  </td>
+                                  <td className="p-3">
+                                    {isLayer ? (
+                                      <input type="number" min="0" placeholder="فعلية" disabled={age < 1} value={bulkData[cycle._id]?.egg_trays_produced} onChange={e => handleBulkChange(cycle._id, 'egg_trays_produced', e.target.value)} className="w-full rounded-lg border border-emerald-100 bg-emerald-50/30 px-2 py-2 text-center text-sm font-black text-emerald-700 outline-none focus:border-emerald-500 focus:bg-emerald-50 dark:border-emerald-900/30 dark:bg-slate-900 dark:text-emerald-400 disabled:opacity-50" />
+                                    ) : (
+                                      <div className="text-center text-[10px] font-bold text-slate-300 dark:text-slate-600">- تسمين -</div>
+                                    )}
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex flex-col gap-1.5">
+                                      <select disabled={age < 1} value={bulkData[cycle._id]?.medication_item_id} onChange={e => handleBulkChange(cycle._id, 'medication_item_id', e.target.value)} className="w-full rounded-lg border border-indigo-100 bg-indigo-50/30 px-2 py-1.5 text-[11px] font-bold text-indigo-800 outline-none focus:border-indigo-500 dark:border-indigo-900/30 dark:bg-slate-900 dark:text-indigo-300 disabled:opacity-50">
+                                        <option value="">-- بدون أدوية --</option>
+                                        {generalItems.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+                                      </select>
+                                      {bulkData[cycle._id]?.medication_item_id && (
+                                        <input type="number" step="0.01" min="0" placeholder="الكمية (لتر/كجم)" value={bulkData[cycle._id]?.medication_quantity} onChange={e => handleBulkChange(cycle._id, 'medication_quantity', e.target.value)} className="w-full rounded-lg border border-indigo-200 bg-white px-2 py-1.5 text-center text-[11px] font-black text-indigo-700 outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <input type="text" placeholder="ملاحظات..." disabled={age < 1} value={bulkData[cycle._id]?.notes} onChange={e => handleBulkChange(cycle._id, 'notes', e.target.value)} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs outline-none focus:border-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-white disabled:opacity-50" />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
-                    </div>
-
-                    <div>
-                      <h4 className="flex items-center gap-2 font-black text-sm text-amber-600 dark:text-amber-500 mb-3"><Wheat className="w-4 h-4"/> استهلاك العلف (يسحب من المخزن)</h4>
-                      <div className="space-y-3">
-                        <select value={formData.feed_item_id} onChange={e => setFormData(p => ({...p, feed_item_id: e.target.value}))} className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900 outline-none focus:border-amber-500 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
-                          <option value="">-- اختر نوع العلف المستهلك --</option>
-                          {feedItems.map(f => <option key={f._id} value={f._id}>{f.name} (المتاح: {f.stock_quantity} {f.unit})</option>)}
-                        </select>
-                        <div className="grid grid-cols-2 gap-3">
-                          <input type="number" step="0.01" min="0" placeholder="العلف (عدد الشكاير)" value={formData.feed_consumed_bags} onChange={e => setFormData(p => ({...p, feed_consumed_bags: e.target.value}))} className="w-full rounded-xl border border-amber-100 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-amber-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                          <div className="relative">
-                            <Droplets className="absolute right-3 top-2.5 h-4 w-4 text-cyan-500" />
-                            <input type="number" min="0" placeholder="استهلاك المياه (لتر) - اختياري" value={formData.water_consumed_liters} onChange={e => setFormData(p => ({...p, water_consumed_liters: e.target.value}))} className="w-full rounded-xl border border-cyan-100 bg-white pl-3 pr-9 py-2.5 text-sm outline-none focus:border-cyan-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* الإنتاج (للبياض  تنبيه السلفة الذكي */}
-                    {activeSelectedCycle?.type === 'LAYER' && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
-                        <h4 className="flex items-center gap-2 font-black text-sm text-emerald-700 dark:text-emerald-400 mb-3"><Package className="w-4 h-4"/> إنتاج البيض اليومي</h4>
-                        
-                        {/* 🚀 ظهور رسالة التنبيه إذا كان هناك سحب مقدم */}
-                        <AnimatePresence>
-                          {pendingEggPulls > 0 && (
-                            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-4 bg-amber-100 border border-amber-300 text-amber-800 dark:bg-amber-900/40 dark:border-amber-700 dark:text-amber-300 p-3 rounded-xl flex gap-3 items-start">
-                              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-sm font-black mb-1">تسوية آلية معلقة (سلفة مبيعات)</p>
-                                <p className="text-xs font-bold leading-relaxed">
-                                  تم سحب <span className="font-black bg-amber-200 dark:bg-amber-800 px-1 rounded mx-1">({pendingEggPulls} طبق)</span> من هذا العنبر لتغطية مبيعات سابقة اليوم. 
-                                  <br/>يرجى إدخال <span className="underline">البيض المتبقي أمامك الآن فقط</span> وسيقوم النظام بالجمع الآلي.
-                                </p>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
-                        <div className="w-full">
-                          <label className="mb-1 block text-[11px] font-bold text-emerald-600 dark:text-emerald-500">أطباق سليمة (كرتونة) موجودة فعلياً</label>
-                          <input type="number" min="0" placeholder="عدد أطباق البيض الفعلية المتوفرة الآن" value={formData.egg_trays_produced} onChange={e => setFormData(p => ({...p, egg_trays_produced: e.target.value}))} className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-sm font-black text-emerald-900 outline-none focus:border-emerald-500 dark:border-emerald-800 dark:bg-slate-900 dark:text-white" />
-                        </div>
-                      </motion.div>
-                    )}
-
-                    <div className="space-y-3">
-                      <input type="text" placeholder="الأدوية أو التحصينات (إن وجدت)" value={formData.medications_given} onChange={e => setFormData(p => ({...p, medications_given: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
-                      <textarea rows="2" placeholder="ملاحظات إضافية..." value={formData.notes} onChange={e => setFormData(p => ({...p, notes: e.target.value}))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white resize-none"></textarea>
                     </div>
 
                   </form>
                 </div>
                 
-                <div className="p-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50 dark:bg-slate-900 rounded-b-3xl">
-                  <button type="submit" form="dailyLogForm" disabled={isSubmitting || calculatedAge < 1 || !formData.cycle_id} className="flex w-full justify-center items-center rounded-xl bg-indigo-600 py-3.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-70 shadow-md shadow-indigo-600/20">
-                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'حفظ اليومية وتحديث المخزن'}
+                <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900 rounded-b-3xl">
+                  <button type="submit" form="bulkDailyLogForm" disabled={isSubmitting || !globalLogDate} className="flex w-full justify-center items-center rounded-xl bg-indigo-600 py-4 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-70 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all">
+                    {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : '🚀 حفظ اليوميات المجمعة وتحديث الأرصدة'}
                   </button>
                 </div>
 
