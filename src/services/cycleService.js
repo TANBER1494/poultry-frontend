@@ -69,6 +69,12 @@ recordCycleSale: async (cycleId, data) => {
     const response = await api.post(`/cycles/${cycleId}/sales`, data); 
     return response.data;
   },
+
+  getFarmFinancialSummary: async (farmId) => {
+    const response = await api.get(`/cycles/farm/${farmId}/financial-summary`);
+    return response.data;
+  },
+  
 };
 
 export default cycleService;
