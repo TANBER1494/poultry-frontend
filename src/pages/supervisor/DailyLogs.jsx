@@ -5,7 +5,7 @@ import {
   Plus, X, Loader2, ClipboardList, Activity, Package, 
   Bird, CalendarDays, Wheat, Table, Search, Printer, ChevronDown, ChevronUp, Share2
 } from 'lucide-react';
-import html2canvas from 'html2canvas'; // 🚀 استيراد مكتبة تحويل الشاشة لصورة
+import html2canvas from 'html2canvas';
 import farmService from '../../services/farmService';
 import cycleService from '../../services/cycleService';
 import inventoryService from '../../services/inventoryService';
@@ -22,6 +22,7 @@ const DailyLogs = () => {
   const [activeCycles, setActiveCycles] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
   const [generalItems, setGeneralItems] = useState([]); 
+  const [productItems, setProductItems] = useState([]); // 🚀 لتخزين البيض
   
   const [logsByDate, setLogsByDate] = useState({});
   const [expandedDates, setExpandedDates] = useState([]); 
@@ -30,7 +31,7 @@ const DailyLogs = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSharing, setIsSharing] = useState(false); // 🚀 حالة التحميل للمشاركة
+  const [isSharing, setIsSharing] = useState(false); 
   
   const [isFormOpen, setIsFormOpen] = useState(isNewAction);
 
@@ -78,6 +79,7 @@ const DailyLogs = () => {
         const invItems = inventoryRes.items || [];
         setFeedItems(invItems.filter(item => item.category === 'FEED'));
         setGeneralItems(invItems.filter(item => !['FEED', 'PRODUCT'].includes(item.category)));
+        setProductItems(invItems.filter(item => item.category === 'PRODUCT')); // 🚀 جلب البيض
 
         const initialBulk = {};
         active.forEach(c => {
@@ -213,12 +215,21 @@ const DailyLogs = () => {
     }
   };
 
+  // 🚀 جلب إجمالي البيض في المخزن
+  const getTotalEggsInStock = () => productItems.reduce((acc, item) => acc + (item.stock_quantity || 0), 0);
+
   // 🖨️ دالة الطباعة بالـ Iframe
   const handlePrintDay = (dateStr, dayLogs) => {
     const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     
     let tableRows = '';
+    let totalDayFeed = 0;
+    let totalDayDead = 0;
+
     dayLogs.forEach(log => {
+      totalDayFeed += (Number(log.feed_consumed_bags) || 0);
+      totalDayDead += (Number(log.mortality_count) || 0);
+      
       const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
       const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
       tableRows += `
@@ -233,6 +244,17 @@ const DailyLogs = () => {
         </tr>
       `;
     });
+
+    // 🚀 إضافة صف الإجمالي للطباعة
+    tableRows += `
+      <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #94a3b8;">
+        <td colspan="2" style="text-align: center; color: #1e293b;">🏢 إجمالي المخزن / اليومية</td>
+        <td style="color: #e11d48;">${totalDayDead}</td>
+        <td style="color: #d97706;">${totalDayFeed}</td>
+        <td style="color: #059669;"><small style="color:#64748b; font-size:10px;">بالمخزن:</small> ${getTotalEggsInStock()}</td>
+        <td colspan="2"></td>
+      </tr>
+    `;
 
     const htmlContent = `
       <html dir="rtl">
@@ -290,13 +312,12 @@ const DailyLogs = () => {
     }, 500);
   };
 
-  // 🚀 دالة توليد الصورة والمشاركة عبر واتساب (Web Share API)
+  // 🚀 دالة توليد الصورة والمشاركة
   const handleShareAsImage = async (dateStr, dayLogs) => {
     try {
       setIsSharing(true);
       const formattedDate = new Date(dateStr).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-      // بناء حاوية HTML وهمية خارج الشاشة لالتقاطها كصورة
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.left = '-9999px';
@@ -309,7 +330,13 @@ const DailyLogs = () => {
       container.style.color = '#333';
 
       let tableRows = '';
+      let totalDayFeed = 0;
+      let totalDayDead = 0;
+
       dayLogs.forEach(log => {
+          totalDayFeed += (Number(log.feed_consumed_bags) || 0);
+          totalDayDead += (Number(log.mortality_count) || 0);
+
           const typeLabel = log.cycleDetails?.type === 'LAYER' ? 'بياض' : 'تسمين';
           const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
           tableRows += `
@@ -324,6 +351,17 @@ const DailyLogs = () => {
             </tr>
           `;
       });
+
+      // 🚀 صف الإجمالي للصورة
+      tableRows += `
+        <tr style="background-color: #f1f5f9; border-top: 2px solid #94a3b8;">
+          <td colspan="2" style="border: 1px solid #cbd5e1; padding: 12px; text-align: center; font-weight: bold; color: #1e293b;">🏢 إجمالي المخزن / اليومية</td>
+          <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #e11d48;">${totalDayDead}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #d97706;">${totalDayFeed}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #059669;"><span style="font-size:10px; color:#64748b; margin-left:4px;">بالمخزن:</span>${getTotalEggsInStock()}</td>
+          <td colspan="2" style="border: 1px solid #cbd5e1; padding: 12px;"></td>
+        </tr>
+      `;
 
       container.innerHTML = `
         <h2 style="text-align: center; color: #1e1b4b; border-bottom: 3px solid #e2e8f0; padding-bottom: 15px; font-size: 24px;">📊 يوميات المزرعة - ${formattedDate}</h2>
@@ -346,7 +384,6 @@ const DailyLogs = () => {
 
       document.body.appendChild(container);
 
-      // التقاط الصورة بدقة عالية
       const canvas = await html2canvas(container, {
         scale: 2, 
         useCORS: true,
@@ -357,10 +394,8 @@ const DailyLogs = () => {
 
       canvas.toBlob(async (blob) => {
         if (!blob) throw new Error('فشل إنشاء الصورة');
-        
         const file = new File([blob], `DailyLog_${dateStr}.png`, { type: 'image/png' });
 
-        // التحقق من دعم الموبايل للمشاركة المباشرة للملفات
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
@@ -368,7 +403,6 @@ const DailyLogs = () => {
             text: `تقرير المزرعة لتاريخ ${formattedDate}`
           });
         } else {
-           // في حال كان المستخدم على متصفح كمبيوتر لا يدعم المشاركة، سيتم تنزيل الصورة تلقائياً
            const url = URL.createObjectURL(blob);
            const a = document.createElement('a');
            a.href = url;
@@ -439,6 +473,10 @@ const DailyLogs = () => {
             const isExpanded = expandedDates.includes(dateStr);
             const dayLogs = logsByDate[dateStr];
             
+            // حساب الإجماليات للصفحة الرئيسية
+            const totalDayFeed = dayLogs.reduce((sum, log) => sum + (Number(log.feed_consumed_bags) || 0), 0);
+            const totalDayDead = dayLogs.reduce((sum, log) => sum + (Number(log.mortality_count) || 0), 0);
+
             return (
               <div key={dateStr} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-all">
                 <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
@@ -452,11 +490,9 @@ const DailyLogs = () => {
                     </div>
                   </button>
                   <div className="flex items-center gap-2">
-                    {/* 🚀 زر المشاركة كصورة */}
                     <button onClick={(e) => { e.stopPropagation(); handleShareAsImage(dateStr, dayLogs); }} disabled={isSharing} title="مشاركة التقرير كصورة" className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-500 dark:hover:bg-emerald-900/30 rounded-lg transition-colors disabled:opacity-50">
                       {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
                     </button>
-                    {/* 🖨️ زر الطباعة المحدث */}
                     <button onClick={(e) => { e.stopPropagation(); handlePrintDay(dateStr, dayLogs); }} title="طباعة يومية هذا التاريخ" className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors">
                       <Printer className="w-4 h-4" />
                     </button>
@@ -505,6 +541,21 @@ const DailyLogs = () => {
                                 <td className="p-3 text-[11px] truncate max-w-[150px]" title={log.notes}>{log.notes || '-'}</td>
                               </tr>
                             ))}
+                            {/* 🚀 صف الإجمالي للمخزن */}
+                            <tr className="bg-slate-100 dark:bg-slate-800 border-t-2 border-slate-200 dark:border-slate-700">
+                              <td className="p-3 text-center font-black text-slate-800 dark:text-white border-l border-slate-200 dark:border-slate-700">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Package className="w-4 h-4 text-indigo-500" /> المخزن / الإجمالي
+                                </div>
+                              </td>
+                              <td className="p-3 font-black text-rose-600 dark:text-rose-400 border-l border-slate-200 dark:border-slate-700">{totalDayDead}</td>
+                              <td className="p-3 font-black text-amber-600 dark:text-amber-500 border-l border-slate-200 dark:border-slate-700">{totalDayFeed}</td>
+                              <td className="p-3 font-black text-emerald-600 dark:text-emerald-400 border-l border-slate-200 dark:border-slate-700">
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 mr-1 font-bold">رصيد:</span>
+                                {getTotalEggsInStock()}
+                              </td>
+                              <td colSpan="2" className="p-3 bg-slate-50 dark:bg-slate-800/50"></td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
