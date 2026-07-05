@@ -6,9 +6,7 @@ import {
   Loader2,
   CalendarDays,
   Bird,
-  TrendingUp,
   TrendingDown,
-  Wallet,
   Activity,
   ShieldCheck,
   Home,
@@ -17,10 +15,9 @@ import {
   Hourglass,
   Tractor,
   Package,
-  Sparkles,
   Printer,
   User,
-  AlertTriangle
+  Banknote
 } from 'lucide-react';
 import cycleService from '../../services/cycleService';
 import dailyLogService from '../../services/dailyLogService';
@@ -110,15 +107,15 @@ const CycleDetails = () => {
           <style>
             body { font-family: 'Tahoma', Arial, sans-serif; padding: 20px; color: #333; }
             .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
-            th { background-color: #d97706; color: white; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; text-align: right; }
+            th, td { border: 1px solid #ddd; padding: 8px; }
+            th { background-color: #4f46e5; color: white; }
             .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
           </style>
         </head>
         <body>
           <div class="header">
-            <h2>سجل المتابعة اليومي (يوميات العنابر)</h2>
+            <h2>سجل المتابعة اليومي والإنتاج</h2>
             <h3>دورة: ${cycle.name} | العنبر: ${cycle.barn_id?.name}</h3>
           </div>
           <table>
@@ -127,31 +124,31 @@ const CycleDetails = () => {
                 <th>التاريخ (العمر)</th>
                 <th>النافق</th>
                 <th>علف (شكاير)</th>
-                <th>مياه (لتر)</th>
                 ${cycle.type === 'LAYER' ? '<th>إنتاج (أطباق)</th>' : ''}
+                <th>أدوية ومستلزمات</th>
                 <th>المشرف</th>
                 <th>ملاحظات</th>
               </tr>
             </thead>
             <tbody>
               ${logs
-                .map(
-                  (log) => `
-                <tr>
-                  <td>${new Date(log.log_date).toLocaleDateString('ar-EG')} (عمر ${log.age_in_days} يوم)</td>
-                  <td style="color: red; font-weight: bold;">${log.mortality_count || 0}</td>
-                  <td>${log.feed_consumed_bags || 0}</td>
-                  <td>${log.water_consumed_liters || 0}</td>
-                  ${cycle.type === 'LAYER' ? `<td>${log.egg_trays_produced || 0}</td>` : ''}
-                  <td>${log.recorded_by?.name || 'غير محدد'}</td>
-                  <td>${log.notes || '-'}</td>
-                </tr>
-              `
-                )
-                .join('')}
+                .map((log) => {
+                  const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+                  return `
+                    <tr>
+                      <td>${new Date(log.log_date).toLocaleDateString('ar-EG')} (عمر ${log.age_in_days} يوم)</td>
+                      <td style="color: red; font-weight: bold;">${log.mortality_count || 0}</td>
+                      <td>${log.feed_consumed_bags || 0}</td>
+                      ${cycle.type === 'LAYER' ? `<td>${log.egg_trays_produced || 0}</td>` : ''}
+                      <td>${meds || '-'}</td>
+                      <td>${log.recorded_by?.name || 'غير محدد'}</td>
+                      <td>${log.notes || '-'}</td>
+                    </tr>
+                  `;
+                }).join('')}
             </tbody>
           </table>
-          <div class="footer"><p>نظام إدارة المزارع - تقرير الاستهلاك اليومي</p></div>
+          <div class="footer"><p>نظام إدارة المزارع - تقرير الاستهلاك والإنتاج</p></div>
         </body>
       </html>
     `;
@@ -174,18 +171,12 @@ const CycleDetails = () => {
   const initialBirds = cycle.initial_bird_count || 0;
   const currentBirds = cycle.current_bird_count || 0;
   const deadBirds = cycle.total_dead_birds || 0;
-  const soldBirds = cycle.total_sold_birds || 0;
-  const soldEggs = cycle.total_sold_eggs || 0;
-  const soldManure = cycle.total_sold_manure || 0;
-  const pendingPulls = cycle.pending_egg_pulls || 0;
+  const totalExpenses = cycle.total_expenses || 0;
+  
+  // 🚀 تجميع الإنتاج الكلي من اليوميات بدلاً من الاعتماد على المبيعات
+  const totalProducedEggs = logs.reduce((sum, log) => sum + (Number(log.egg_trays_produced) || 0), 0);
 
-  const mortalityRate =
-    initialBirds > 0 ? ((deadBirds / initialBirds) * 100).toFixed(2) : 0;
-
-  const estimatedProfit =
-    (cycle.total_revenue || 0) - (cycle.total_expenses || 0);
-  const isProfitable = estimatedProfit >= 0;
-
+  const mortalityRate = initialBirds > 0 ? ((deadBirds / initialBirds) * 100).toFixed(2) : 0;
   const cycleAge = calculateAge(cycle.start_date, cycle.end_date, cycle.status);
 
   return (
@@ -248,38 +239,10 @@ const CycleDetails = () => {
       </div>
 
       {activeTab === 'OVERVIEW' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
-        >
-          {cycle.type === 'LAYER' && (
-           <div className="bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
-              <Activity className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-black text-sm mb-1">معلومة محاسبية (نظام المخزن المجمع)</h4>
-                <p className="text-xs font-medium leading-relaxed">
-                  نظراً لأن بيع البيض يتم من المخزن المجمع للمزرعة، فإن إيرادات المبيعات تعتبر "إيراد عام للمزرعة" وقد تتمركز دفترياً في الدورة الرئيسية. للحصول على تقييم مالي دقيق لقطاع البياض ككل، يرجى الرجوع لشاشة "الماليات".
-                </p>
-              </div>
-           </div>
-          )}
-
-          {cycle.type === 'LAYER' && pendingPulls > 0 && (
-           <div className="bg-rose-50 dark:bg-rose-900/20 rounded-2xl p-4 border border-rose-200 dark:border-rose-800 shadow-sm flex items-center justify-between col-span-full">
-             <div className="flex items-center gap-3">
-               <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400">
-                 <AlertTriangle className="w-5 h-5" />
-               </div>
-               <div>
-                 <p className="text-sm font-black text-rose-800 dark:text-rose-300">سحوبات معلقة (سلفة مبيعات)</p>
-                 <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-0.5">تم سحب <span className="font-black">({pendingPulls} طبق)</span> لتغطية المبيعات وتنتظر تسوية المشرف في يومية اليوم.</p>
-               </div>
-             </div>
-           </div>
-          )}
-
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            
+            {/* الكارت الأول: الطيور الحية */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-4">
@@ -287,35 +250,20 @@ const CycleDetails = () => {
                     <Bird className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      العدد الافتتاحي
-                    </p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white">
-                      {initialBirds.toLocaleString()}
-                    </h3>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">العدد الافتتاحي</p>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white">{initialBirds.toLocaleString()}</h3>
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl text-center">
-                  <p className="text-[10px] font-bold text-slate-500 mb-1">
-                    الرصيد الحي
-                  </p>
-                  <p className="text-sm font-black text-slate-700 dark:text-slate-200">
-                    {currentBirds.toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2.5 rounded-xl text-center">
-                  <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mb-1">
-                    طيور مباعة
-                  </p>
-                  <p className="text-sm font-black text-indigo-700 dark:text-indigo-300">
-                    {soldBirds.toLocaleString()}
-                  </p>
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl flex justify-between items-center">
+                  <p className="text-xs font-bold text-slate-500">الرصيد الحي الحالي</p>
+                  <p className="text-base font-black text-slate-700 dark:text-slate-200">{currentBirds.toLocaleString()}</p>
                 </div>
               </div>
             </div>
 
+            {/* الكارت الثاني: النافق */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3">
@@ -323,202 +271,125 @@ const CycleDetails = () => {
                     <TrendingDown className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      الطيور النافقة (خسارة)
-                    </p>
-                    <h3 className="text-2xl font-black text-slate-800 dark:text-white">
-                      {deadBirds.toLocaleString()}
-                    </h3>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">الطيور النافقة (خسارة)</p>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white">{deadBirds.toLocaleString()}</h3>
                   </div>
                 </div>
               </div>
               <div className="mt-4 flex items-center justify-between bg-rose-50 dark:bg-rose-900/10 p-3 rounded-xl border border-rose-100 dark:border-rose-900/20">
-                <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                  معدل النفوق العام:
-                </span>
-                <span className="text-lg font-black text-rose-700 dark:text-rose-400">
-                  {mortalityRate}%
-                </span>
+                <span className="text-xs font-bold text-rose-600 dark:text-rose-400">معدل النفوق العام:</span>
+                <span className="text-lg font-black text-rose-700 dark:text-rose-400">{mortalityRate}%</span>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm md:col-span-2 flex flex-col justify-between">
+            {/* الكارت الثالث: التكلفة الإجمالية */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
               <div className="flex items-center gap-3 mb-4">
-                <div
-                  className={`p-3 rounded-xl ${isProfitable ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400'}`}
-                >
-                  <Wallet className="w-6 h-6" />
+                <div className="p-3 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                  <Banknote className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                    صافي الأرباح المسجلة{' '}
-                    {cycle.status !== 'CLOSED' && '(تقديري)'}
-                  </p>
-                  <h3
-                    className={`text-2xl font-black ${isProfitable ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
-                  >
-                    {formatCurrency(estimatedProfit)}
-                  </h3>
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي التكاليف (علف وأدوية)</p>
+                  <h3 className="text-2xl font-black text-slate-800 dark:text-white">{formatCurrency(totalExpenses)}</h3>
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                  <p className="text-[11px] font-bold text-slate-500 mb-1 flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-indigo-500" /> إجمالي
-                    المبيعات
-                  </p>
-                  <p className="text-base font-black text-slate-800 dark:text-white">
-                    {formatCurrency(cycle.total_revenue)}
-                  </p>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700/50">
-                  <p className="text-[11px] font-bold text-slate-500 mb-1 flex items-center gap-1">
-                    <TrendingDown className="w-3 h-3 text-rose-500" /> التكاليف
-                    والمصروفات
-                  </p>
-                  <p className="text-base font-black text-slate-800 dark:text-white">
-                    {formatCurrency(cycle.total_expenses)}
-                  </p>
-                </div>
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] font-bold text-slate-400 text-center">التكلفة التراكمية منذ بدء الدورة</p>
               </div>
             </div>
+
+            {/* الكارت الرابع: الإنتاج (للبياض فقط) */}
+            {cycle.type === 'LAYER' && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-3 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي البيض المنتج</p>
+                    <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                      {totalProducedEggs.toLocaleString()} <span className="text-sm text-slate-400 font-bold">طبق</span>
+                    </h3>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  <p className="text-[10px] font-bold text-slate-400 text-center">إجمالي ما تم إنتاجه وتوريده للمخزن</p>
+                </div>
+              </div>
+            )}
           </div>
-
-          {(cycle.type === 'LAYER' || soldEggs > 0 || soldManure > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
-                    <Package className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-500">
-                      إجمالي البيض المباع من خلال الدورة
-                    </p>
-                    <h4 className="text-lg font-black text-slate-800 dark:text-white">
-                      {soldEggs.toLocaleString()}{' '}
-                      <span className="text-xs font-bold text-slate-400">
-                        كرتونة/طبق
-                      </span>
-                    </h4>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-500">
-                      إجمالي السباخ المباع
-                    </p>
-                    <h4 className="text-lg font-black text-slate-800 dark:text-white">
-                      {soldManure.toLocaleString()}{' '}
-                      <span className="text-xs font-bold text-slate-400">
-                        نقلة/طن
-                      </span>
-                    </h4>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </motion.div>
       )}
 
       {activeTab === 'LOGS' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
             <div>
               <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2 text-sm sm:text-base">
-                <FileText className="w-4 h-4 text-amber-500" /> سجل الاستهلاك
-                والمتابعة اليومية
+                <FileText className="w-4 h-4 text-indigo-500" /> سجل الاستهلاك والإنتاج اليومي
               </h3>
-              <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">
-                تم تسجيل {logs.length} يومية
-              </p>
+              <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-1">تم تسجيل {logs.length} يومية</p>
             </div>
-            <button
-              onClick={handlePrintLogs}
-              disabled={logs.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
-            >
-              <Printer className="w-4 h-4" />{' '}
-              <span className="hidden sm:inline">طباعة السجل</span>
+            <button onClick={handlePrintLogs} disabled={logs.length === 0} className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-colors shadow-sm disabled:opacity-50">
+              <Printer className="w-4 h-4" /> <span className="hidden sm:inline">طباعة السجل</span>
             </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-bold text-slate-500 dark:text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 text-[11px] font-black text-slate-500 dark:text-slate-400">
                 <tr>
                   <th className="p-4">التاريخ (العمر)</th>
                   <th className="p-4 text-rose-500">النافق</th>
                   <th className="p-4 text-amber-600">العلف (شكاير)</th>
-                  <th className="p-4 text-cyan-600">المياه (لتر)</th>
-                  {cycle.type === 'LAYER' && (
-                    <th className="p-4 text-emerald-600">الإنتاج (طبق)</th>
-                  )}
+                  {cycle.type === 'LAYER' && <th className="p-4 text-emerald-600">الإنتاج (طبق)</th>}
+                  <th className="p-4 text-indigo-500">أدوية ومستلزمات</th>
                   <th className="p-4">بواسطة</th>
                   <th className="p-4">ملاحظات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {logs.length > 0 ? (
-                  logs.map((log) => (
-                    <tr
-                      key={log._id}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
-                    >
-                      <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
-                        <div className="flex flex-col">
-                          <span className="flex items-center gap-1.5">
-                            <CalendarDays className="w-4 h-4 text-slate-400" />{' '}
-                            {new Date(log.log_date).toLocaleDateString('ar-EG')}
-                          </span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">
-                            عمر {log.age_in_days} يوم
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4 font-black text-rose-600 dark:text-rose-400">
-                        {log.mortality_count || '-'}
-                      </td>
-                      <td className="p-4 font-black text-amber-600 dark:text-amber-500">
-                        {log.feed_consumed_bags || '-'}
-                      </td>
-                      <td className="p-4 font-black text-cyan-600 dark:text-cyan-500">
-                        {log.water_consumed_liters || '-'}
-                      </td>
-                      {cycle.type === 'LAYER' && (
-                        <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">
-                          {log.egg_trays_produced || '-'}
+                  logs.map((log) => {
+                    const meds = (log.consumed_medications || []).map(m => `${m.name} (${m.quantity})`).join('، ');
+                    return (
+                      <tr key={log._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 font-bold text-slate-700 dark:text-slate-300">
+                          <div className="flex flex-col">
+                            <span className="flex items-center gap-1.5">
+                              <CalendarDays className="w-4 h-4 text-slate-400" /> {new Date(log.log_date).toLocaleDateString('ar-EG')}
+                            </span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">عمر {log.age_in_days} يوم</span>
+                          </div>
                         </td>
-                      )}
-                      <td className="p-4 text-xs font-bold text-slate-500 flex items-center gap-1 mt-2">
-                        <User className="w-3 h-3" />{' '}
-                        {log.recorded_by?.name || 'غير محدد'}
-                      </td>
-                      <td
-                        className="p-4 text-xs text-slate-500 truncate max-w-[150px]"
-                        title={log.notes || log.medications_given}
-                      >
-                        {log.notes || log.medications_given || '-'}
-                      </td>
-                    </tr>
-                  ))
+                        <td className="p-4 font-black text-rose-600 dark:text-rose-400">{log.mortality_count || '-'}</td>
+                        <td className="p-4 font-black text-amber-600 dark:text-amber-500">{log.feed_consumed_bags || '-'}</td>
+                        {cycle.type === 'LAYER' && (
+                          <td className="p-4 font-black text-emerald-600 dark:text-emerald-400">{log.egg_trays_produced || '-'}</td>
+                        )}
+                        <td className="p-4">
+                          {log.consumed_medications && log.consumed_medications.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {log.consumed_medications.map((med, i) => (
+                                <span key={i} className="text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                                  {med.name} ({med.quantity})
+                                </span>
+                              ))}
+                            </div>
+                          ) : <span className="text-slate-400">-</span>}
+                        </td>
+                        <td className="p-4 text-[11px] font-bold text-slate-500 flex items-center gap-1 mt-2">
+                          <User className="w-3 h-3" /> {log.recorded_by?.name || 'غير محدد'}
+                        </td>
+                        <td className="p-4 text-[11px] text-slate-500 truncate max-w-[150px]" title={log.notes}>
+                          {log.notes || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td
-                      colSpan="7"
-                      className="p-8 text-center text-slate-500 font-bold"
-                    >
+                    <td colSpan={cycle.type === 'LAYER' ? 7 : 6} className="p-8 text-center text-slate-500 font-bold">
                       لا توجد يوميات مسجلة لهذه الدورة
                     </td>
                   </tr>
